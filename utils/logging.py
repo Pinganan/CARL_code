@@ -72,6 +72,7 @@ def setup_logging(output_dir=None):
         fh.setLevel(logging.INFO)
         fh.setFormatter(plain_formatter)
         logger.addHandler(fh)
+    logger.setLevel(logging.WARNING)
 
 
 def get_logger(name):

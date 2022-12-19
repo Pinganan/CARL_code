@@ -12,7 +12,7 @@ class Classification(object):
     def __init__(self, cfg):
         self.cfg = cfg
         
-    def compute_loss(self, model, videos, labels, seq_lens, chosen_steps, video_masks, training=True):
+    def compute_loss(self, model, videos, labels, video_masks, training=True):
 
         num_frames = self.cfg.TRAIN.NUM_FRAMES
 

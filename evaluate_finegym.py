@@ -89,11 +89,7 @@ def get_embeddings_dataset(cfg, model, data_loader, output_dir):
                 steps = torch.clamp(steps.view(-1), 0, seq_len - 1)
                 curr_data = video[:, steps]
                 # print(i, num_steps, seq_len, curr_data.shape)
-                if cfg.USE_AMP:
-                    with torch.cuda.amp.autocast():
-                        emb_feats = model(curr_data, num_steps)
-                else:
-                    emb_feats = model(curr_data, num_steps)
+                emb_feats = model(curr_data, num_steps)
                 embs.append(emb_feats[0].cpu())
             embs = torch.cat(embs, dim=0)
 

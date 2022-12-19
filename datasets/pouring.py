@@ -79,7 +79,6 @@ class Pouring(torch.utils.data.Dataset):
             chosen_steps = torch.stack([chosen_step_0, chosen_step_1], dim=0)
             video_mask = torch.stack([video_mask0, video_mask1], dim=0)
             return videos, labels, seq_lens, chosen_steps, video_mask, names
-
         elif not self.sample_all:
             steps, chosen_steps, video_mask = self.sample_frames(seq_len, self.num_frames)
         else:

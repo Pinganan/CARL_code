@@ -31,11 +31,11 @@ CONFIG.DATASETS = [
 ]
 
 # self-supervised mode (SimClR-like methods compare two augmented views)
-CONFIG.SSL = True 
+CONFIG.SSL = True
 # the name of dataset dir
-CONFIG.PATH_TO_DATASET = 'pouring'
+CONFIG.PATH_TO_DATASET = '/data/Users/pingan/micro_expression/obj2unlight'
 # Algorithm used for training: tcc, tcn, scl, classification.
-CONFIG.TRAINING_ALGO = 'scl'
+CONFIG.TRAINING_ALGO = 'classification'
 # Size of images/frames.
 CONFIG.IMAGE_SIZE = 224  # For ResNet50
 

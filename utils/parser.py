@@ -1,6 +1,6 @@
 # copy from slowfast.utils.parser
 import os
-import yaml
+# import yaml
 import utils.logging as logging
 import argparse
 from utils.config import get_cfg
@@ -65,29 +65,29 @@ def load_config(args):
     """
     # Setup cfg.
     cfg = get_cfg()
-    # Load config from cfg.
-    if args.cfg_file is not None and os.path.exists(args.cfg_file):
-        logger.info('Using config from %s.', args.cfg_file)
-        with open(args.cfg_file, 'r') as config_file:
-            config_dict = yaml.safe_load(config_file)
-        cfg.update(config_dict)
-    # Load config from command line, overwrite config from opts.
-    if args.opts is not None:
-        for full_key, v in zip(args.opts[0::2], args.opts[1::2]):
-            key_list = full_key.split(".")
-            d = cfg
-            for subkey in key_list[:-1]:
-                d = d[subkey]
-            subkey = key_list[-1]
-            d[subkey] = convert_value(d[subkey], v)
+    # # Load config from cfg.
+    # if args.cfg_file is not None and os.path.exists(args.cfg_file):
+    #     logger.info('Using config from %s.', args.cfg_file)
+    #     with open(args.cfg_file, 'r') as config_file:
+    #         config_dict = yaml.safe_load(config_file)
+    #     cfg.update(config_dict)
+    # # Load config from command line, overwrite config from opts.
+    # if args.opts is not None:
+    #     for full_key, v in zip(args.opts[0::2], args.opts[1::2]):
+    #         key_list = full_key.split(".")
+    #         d = cfg
+    #         for subkey in key_list[:-1]:
+    #             d = d[subkey]
+    #         subkey = key_list[-1]
+    #         d[subkey] = convert_value(d[subkey], v)
 
-    if args.logdir is not None:
-        cfg.LOGDIR = args.logdir
-    else:
-        cfg.LOGDIR = os.path.join('/tmp', cfg.LOGDIR)
+    # if args.logdir is not None:
+    #     cfg.LOGDIR = args.logdir
+    # else:
+    #     cfg.LOGDIR = os.path.join('/tmp', cfg.LOGDIR)
 
-    cfg.EVAL.BATCH_SIZE = cfg.TRAIN.BATCH_SIZE
-    cfg.EVAL.NUM_FRAMES = cfg.TRAIN.NUM_FRAMES
+    # cfg.EVAL.BATCH_SIZE = cfg.TRAIN.BATCH_SIZE
+    # cfg.EVAL.NUM_FRAMES = cfg.TRAIN.NUM_FRAMES
     return cfg
 
 def to_dict(config):
