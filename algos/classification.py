@@ -1,7 +1,5 @@
 # coding=utf-8
 import torch
-from models import Classifier
-
 import utils.logging as logging
 
 logger = logging.get_logger(__name__)

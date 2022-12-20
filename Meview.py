@@ -39,32 +39,38 @@ class Meview(torch.utils.data.Dataset):
     def __init__(self, cfg):
         self.cfg = cfg
         self.train_data = []
+        self.train_label = []
         self.create_data()
 
     def random_select(self, id):
-        return np.random.randint(0, NUM_FRAMES[id]-15, 3)
+        return np.random.randint(0, NUM_FRAMES[id]-16, 3)
 
     def create_data(self):
         for sid, subject in enumerate(SUBJECTS):
-            inputs = get_file_paths(f'{self.cfg.PATH_TO_DATASET}/{subject}', '.png')
+            inputs = get_file_paths(
+                f'{self.cfg.PATH_TO_DATASET}/{subject}', '.png')
             images = [cv2.imread(p) for p in inputs]
             start = self.random_select(sid)
             for s in start:
                 self.train_data.append(images[s:s+15])
-
+                self.train_label.append(
+                    [1 if ONSET[sid] <= s < OFFSET[sid] else 0 for s in range(s, s+15)])
         self.train_data = torch.Tensor(np.array(self.train_data))
+        self.train_label = torch.Tensor(np.array(self.train_label))
         batch, num_frames, height, width, channel = self.train_data.shape
-        self.train_data = self.train_data.reshape((batch, num_frames, channel, height, width))
+        self.train_data = self.train_data.reshape(
+            (batch, num_frames, channel, height, width))
 
     def __len__(self):
         return len(self.train_data)
 
     def __getitem__(self, index):
-        return self.train_data[index]
+        return self.train_data[index], self.train_label[index], torch.Tensor([1 for _ in range(15)])
 
 
 if __name__ == '__main__':
     args = parse_args()
     cfg = load_config(args)
     dataset = Meview(cfg)
-    print(dataset.train_data.shape)
+    print(dataset.train_data[0].shape)
+    print(dataset.train_label[0].shape)

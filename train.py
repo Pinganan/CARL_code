@@ -13,7 +13,6 @@ import utils.logging as logging
 from utils.parser import parse_args, load_config, setup_train_dir
 from models import build_model, save_checkpoint, load_checkpoint
 from utils.optimizer import construct_optimizer, construct_scheduler, get_lr
-from datasets import construct_dataloader, unnorm
 from Meview import Meview
 from torch.utils.data import DataLoader
 from algos import get_algo
@@ -31,7 +30,7 @@ def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, summa
     if du.is_root_proc():
         train_loader = tqdm(train_loader, total=len(train_loader))
 
-    for cur_iter, (videos, _labels, video_masks, names) in enumerate(train_loader):
+    for cur_iter, (videos, _labels, video_masks) in enumerate(train_loader):
         optimizer.zero_grad()
         loss_dict = algo.compute_loss(model, videos, _labels, video_masks)
         loss = loss_dict["loss"]
@@ -49,19 +48,6 @@ def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, summa
                 total_loss[key] = 0
             total_loss[key] += du.all_reduce([loss_dict[key]]
                                              )[0].item() / data_size
-
-        if cfg.NUM_GPUS == 1 and cur_iter % cfg.LOGGING.REPORT_INTERVAL == 0:
-            logger.info(
-                f"iter {data_size * cur_epoch + cur_iter}, training loss: {loss.item():.3f}")
-            visual_video = videos[0]
-            if cfg.SSL:
-                for i, v in enumerate(visual_video):
-                    summary_writer.add_video(f'{names[0]}_view{i}', unnorm(
-                        v[::cfg.DATA.NUM_CONTEXTS]).unsqueeze(0), 0, fps=4)
-            else:
-                summary_writer.add_video(f'{names[0]}', unnorm(
-                    visual_video[::cfg.DATA.NUM_CONTEXTS]).unsqueeze(0), 0, fps=4)
-
     summary_writer.add_scalar('train/learning_rate',
                               get_lr(optimizer)[0], cur_epoch)
     for key in total_loss:
@@ -79,13 +65,9 @@ def val(cfg, val_loader, model, algo, cur_epoch, summary_writer):
     total_loss = {}
 
     with torch.no_grad():
-        for cur_iter, (videos, labels, seq_lens, chosen_steps, video_masks, names) in enumerate(val_loader):
-            if cfg.TRAINING_ALGO == 'classification':
-                loss_dict = algo.compute_loss(
-                    model, videos, labels, seq_lens, chosen_steps, video_masks, training=False)
-            else:
-                loss_dict = algo.compute_loss(
-                    model, videos, seq_lens, chosen_steps, video_masks, training=False)
+        for cur_iter, (videos, labels, video_masks) in enumerate(val_loader):
+            loss_dict = algo.compute_loss(
+                model, videos, labels, video_masks, training=False)
 
             for key in loss_dict:
                 loss_dict[key][torch.isnan(loss_dict[key])] = 0
@@ -93,17 +75,6 @@ def val(cfg, val_loader, model, algo, cur_epoch, summary_writer):
                     total_loss[key] = 0
                 total_loss[key] += du.all_reduce([loss_dict[key]]
                                                  )[0].item() / data_size
-
-        if cfg.NUM_GPUS == 1:
-            print(names)
-            visual_video = videos[0]
-            if cfg.SSL:
-                for i, v in enumerate(visual_video):
-                    summary_writer.add_video(
-                        f'{names}_view{i}', unnorm(v[::2]).unsqueeze(0), 0, fps=4)
-            else:
-                summary_writer.add_video(f'{names}', unnorm(
-                    visual_video[::2]).unsqueeze(0), 0, fps=4)
 
     for key in total_loss:
         summary_writer.add_scalar(f'val/{key}', total_loss[key], cur_epoch)
@@ -162,6 +133,9 @@ def main():
     train_dataset = Meview(cfg)
     train_loader = DataLoader(train_dataset, batch_size=cfg.TRAIN.BATCH_SIZE,
                               shuffle=True, drop_last=True)
+    val_dataset = Meview(cfg)
+    val_loader = DataLoader(val_dataset, batch_size=cfg.TRAIN.BATCH_SIZE,
+                            shuffle=True, drop_last=True)
 
     """Trains model and evaluates on relevant downstream tasks."""
     start_epoch = load_checkpoint(cfg, model, optimizer)
@@ -173,8 +147,8 @@ def main():
             f"Traning epoch {cur_epoch}/{cfg.TRAIN.MAX_EPOCHS}, {len(train_loader)} iters each epoch")
         train(cfg, train_loader, model, optimizer,
               scheduler, algo, cur_epoch, summary_writer)
+        val(cfg, train_loader, model, algo, cur_epoch, summary_writer)
         # if (cur_epoch+1) % cfg.EVAL.VAL_INTERVAL == 0 or cur_epoch == cfg.TRAIN.MAX_EPOCHS-1:
-        #     val(cfg, val_loader, model, algo, cur_epoch, summary_writer)
         #     if cfg.DATASETS[0] == "finegym":
         #         from evaluate_finegym import evaluate_once
         #         evaluate_once(cfg, model, train_loader, val_loader, train_emb_loader, val_emb_loader,
