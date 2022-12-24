@@ -52,6 +52,7 @@ class Meview(torch.utils.data.Dataset):
                 self.train_data.append(images[i:i+30])
                 self.train_label.append(
                     [1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(i, i+15)])
+            break
         self.train_data = torch.Tensor(np.array(self.train_data))
         self.train_label = torch.Tensor(np.array(self.train_label))
         batch, num_frames, height, width, channel = self.train_data.shape

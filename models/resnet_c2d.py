@@ -13,11 +13,7 @@ class Classifier(nn.Module):
     """
     def __init__(self, cfg):
         super(Classifier, self).__init__()
-
-        if cfg.DATASETS[0] == "finegym":
-            self.num_classes = cfg.EVAL.CLASS_NUM
-        else:
-            self.num_classes = DATASET_TO_NUM_CLASSES[cfg.DATASETS[0]]
+        self.num_classes = cfg.EVAL.CLASS_NUM
         self.embedding_size = cfg.MODEL.EMBEDDER_MODEL.EMBEDDING_SIZE
         drop_rate = cfg.MODEL.EMBEDDER_MODEL.FC_DROPOUT_RATE
 

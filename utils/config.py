@@ -10,25 +10,10 @@ CONFIG = edict()
 # ******************************************************************************
 
 # Directory for the experiment logs.
-CONFIG.LOGDIR = '/tmp/scl_transformer_logs'
+CONFIG.LOGDIR = '/home/pingan/micro/CARL_code'
 # Dataset for training TCC.
 # Check dataset_splits.py for full list.
-CONFIG.DATASETS = [
-    'pouring',
-    # 'baseball_pitch',
-    # 'baseball_swing',
-    # 'bench_press',
-    # 'bowl',
-    # 'clean_and_jerk',
-    # 'golf_swing',
-    # 'jumping_jacks',
-    # 'pushup',
-    # 'pullup',
-    # 'situp',
-    # 'squat',
-    # 'tennis_forehand',
-    # 'tennis_serve',
-]
+CONFIG.DATASETS = ['microexpression']
 
 # self-supervised mode (SimClR-like methods compare two augmented views)
 CONFIG.SSL = True
@@ -72,6 +57,7 @@ CONFIG.EVAL.BATCH_SIZE = 1
 CONFIG.EVAL.NUM_FRAMES = 240
 # Evaluate for each N epoches
 CONFIG.EVAL.VAL_INTERVAL = 50
+CONFIG.EVAL.CLASS_NUM = 2
 
 # A task evaluates the embeddings or the trained model.
 # Currently available tasks are: 'algo_loss', 'classification',
@@ -85,7 +71,7 @@ CONFIG.EVAL.TASKS = [
     'event_completion',
 ]
 
-# The video will be cut into clips for evaluation, 
+# The video will be cut into clips for evaluation,
 # the max number of frame in each clip.
 CONFIG.EVAL.FRAMES_PER_BATCH = 1000
 CONFIG.EVAL.KENDALLS_TAU_STRIDE = 5  # 5 for Pouring, 2 for PennAction
@@ -106,7 +92,7 @@ CONFIG.MODEL.BASE_MODEL = edict()
 CONFIG.MODEL.BASE_MODEL.NETWORK = 'Resnet50_byol'
 # 3: conv1-conv4 of resnet50 will be frozen, and conv5 will be finetuned
 CONFIG.MODEL.BASE_MODEL.LAYER = 3
-# The video will be sent to 2D resnet50 as batched frames, 
+# The video will be sent to 2D resnet50 as batched frames,
 # the max number of frame in each batch.
 CONFIG.MODEL.BASE_MODEL.FRAMES_PER_BATCH = 40
 
@@ -203,9 +189,10 @@ CONFIG.OPTIMIZER.LR.NUM_WARMUP_STEPS = 1
 # Data params
 # ******************************************************************************
 CONFIG.DATA = edict()
-CONFIG.DATA.FRACTION = 1.0 # The labeled fraction of samples for supervised learning
-CONFIG.DATA.ADDITION_TRAINSET = False # additional traning set for finegym
-CONFIG.DATA.SAMPLING_STRATEGY = 'time_augment' # offset_uniform (for TCC), time_augment (for SCL)
+CONFIG.DATA.FRACTION = 1.0  # The labeled fraction of samples for supervised learning
+CONFIG.DATA.ADDITION_TRAINSET = False  # additional traning set for finegym
+# offset_uniform (for TCC), time_augment (for SCL)
+CONFIG.DATA.SAMPLING_STRATEGY = 'time_augment'
 CONFIG.DATA.NUM_CONTEXTS = 1  # number of frames that will be embedded jointly,
 CONFIG.DATA.CONTEXT_STRIDE = 1  # stride between context frames
 CONFIG.DATA.SAMPLING_REGION = 1.5

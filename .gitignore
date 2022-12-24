@@ -3,3 +3,6 @@ __pycache__/*
 .DS_Store
 *.pyc
 run_aml.py
+train_logs/
+checkpoints/
+stdout.log

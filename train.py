@@ -85,11 +85,9 @@ def val(cfg, val_loader, model, algo, cur_epoch, summary_writer):
 def main():
     args = parse_args()
     cfg = load_config(args)
-    # setup_train_dir(cfg, cfg.LOGDIR, args.continue_train)
-    cfg.PATH_TO_DATASET = os.path.join(args.workdir, cfg.PATH_TO_DATASET)
+    setup_train_dir(cfg.LOGDIR)
     cfg.NUM_GPUS = torch.cuda.device_count()  # num_gpus_per_machine
-
-    args.world_size = int(os.getenv('WORLD_SIZE'))  # total_gpus
+    args.world_size = int(os.getenv('WORLD_SIZE', 0))  # total_gpus
     if os.environ.get('OMPI_COMM_WORLD_SIZE') is None:
         args.rank = args.local_rank
     else:
@@ -97,15 +95,16 @@ def main():
         args.rank = args.node_rank * torch.cuda.device_count() + args.local_rank
     logger.info(f'Node info: rank {args.rank} of world size {args.world_size}')
     cfg.args = args
-
     torch.distributed.init_process_group(backend='nccl', init_method='env://')
 
     # Set up environment.
     du.init_distributed_training(cfg)
+
     # Set random seed from configs.
     random.seed(cfg.RNG_SEED)
     np.random.seed(cfg.RNG_SEED)
     torch.manual_seed(cfg.RNG_SEED)
+
     # distributed logging and ignore warning message
     logging.setup_logging(cfg.LOGDIR)
     summary_writer = SummaryWriter(os.path.join(cfg.LOGDIR, 'train_logs'))
