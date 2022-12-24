@@ -1,6 +1,6 @@
 # coding=utf-8
+
 import os
-import sys
 import pprint
 import torch
 import random
@@ -124,12 +124,6 @@ def main():
 
     optimizer = construct_optimizer(model, cfg)
     algo = get_algo(cfg)
-
-    # Setup Dataset Iterators from train and val datasets.
-    # train_loader, train_emb_loader = construct_dataloader(cfg, "train")
-    # val_loader, val_emb_loader = construct_dataloader(cfg, "val")
-    # iterator_tasks, embedding_tasks = get_tasks(cfg)
-
     train_dataset = Meview(cfg)
     train_loader = DataLoader(train_dataset, batch_size=cfg.TRAIN.BATCH_SIZE,
                               shuffle=True, drop_last=True)
@@ -147,20 +141,10 @@ def main():
             f"Traning epoch {cur_epoch}/{cfg.TRAIN.MAX_EPOCHS}, {len(train_loader)} iters each epoch")
         train(cfg, train_loader, model, optimizer,
               scheduler, algo, cur_epoch, summary_writer)
-        val(cfg, train_loader, model, algo, cur_epoch, summary_writer)
-        # if (cur_epoch+1) % cfg.EVAL.VAL_INTERVAL == 0 or cur_epoch == cfg.TRAIN.MAX_EPOCHS-1:
-        #     if cfg.DATASETS[0] == "finegym":
-        #         from evaluate_finegym import evaluate_once
-        #         evaluate_once(cfg, model, train_loader, val_loader, train_emb_loader, val_emb_loader,
-        #                       iterator_tasks, embedding_tasks, cur_epoch, summary_writer)
-        #     elif du.is_root_proc():
-        #         from evaluate import evaluate_once
-        #         evaluate_once(cfg, model, train_loader, val_loader, train_emb_loader, val_emb_loader,
-        #                       iterator_tasks, embedding_tasks, cur_epoch, summary_writer)
+        val(cfg, val_loader, model, algo, cur_epoch, summary_writer)
         if du.is_root_proc() and ((cur_epoch+1) % cfg.CHECKPOINT.SAVE_INTERVAL == 0 or cur_epoch == cfg.TRAIN.MAX_EPOCHS-1):
             save_checkpoint(cfg, model, optimizer, cur_epoch)
         du.synchronize()
-
     torch.distributed.destroy_process_group()
 
 
