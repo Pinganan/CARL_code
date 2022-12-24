@@ -42,19 +42,16 @@ class Meview(torch.utils.data.Dataset):
         self.train_label = []
         self.create_data()
 
-    def random_select(self, id):
-        return np.random.randint(0, NUM_FRAMES[id]-16, 3)
-
     def create_data(self):
         for sid, subject in enumerate(SUBJECTS):
             inputs = get_file_paths(
                 f'{self.cfg.PATH_TO_DATASET}/{subject}', '.png')
             images = [cv2.imread(p) for p in inputs]
-            start = self.random_select(sid)
-            for s in start:
-                self.train_data.append(images[s:s+15])
+
+            for i in range(len(images) - 30):
+                self.train_data.append(images[i:i+30])
                 self.train_label.append(
-                    [1 if ONSET[sid] <= s < OFFSET[sid] else 0 for s in range(s, s+15)])
+                    [1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(i, i+15)])
         self.train_data = torch.Tensor(np.array(self.train_data))
         self.train_label = torch.Tensor(np.array(self.train_label))
         batch, num_frames, height, width, channel = self.train_data.shape
