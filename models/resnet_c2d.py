@@ -1,12 +1,11 @@
 # coding=utf-8
+
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
-import utils.logging as logging
-from datasets.dataset_splits import DATASET_TO_NUM_CLASSES
 
-logger = logging.get_logger(__name__)
 
 class Classifier(nn.Module):
     """Classifier network.
@@ -154,7 +153,6 @@ def load_mocov2_pretrained(pretrained_weights):
             state_dict[key] = value
     return state_dict
 
-import os
 def load_pretrained_resnet50(cfg, res50_model):
     if 'simclr' in cfg.MODEL.BASE_MODEL.NETWORK:
         # from https://github.com/PyTorchLightning/lightning-bolts
@@ -169,10 +167,7 @@ def load_pretrained_resnet50(cfg, res50_model):
     else:
         pretrained_weights = os.path.join(cfg.args.workdir, "pretrained_models/resnet50-0676ba61.pth")
         state_dict = torch.load(pretrained_weights, map_location='cpu')
-
     msg = res50_model.load_state_dict(state_dict, strict=False)
-    logger.info(msg)
-    logger.info(f"=> loaded successfully '{pretrained_weights}'")
 
 
 class BaseModel(nn.Module):

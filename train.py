@@ -115,6 +115,8 @@ def main():
 
     # Build the video model
     model = build_model(cfg)
+    # from torchsummary import summary
+    # summary(model)
     torch.cuda.set_device(args.local_rank)
     model = model.cuda()
     model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)

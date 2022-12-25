@@ -38,6 +38,7 @@ def get_file_paths(root, file_type="/"):
 class Meview(torch.utils.data.Dataset):
     def __init__(self, cfg):
         self.cfg = cfg
+        self.peroid = 30
         self.train_data = []
         self.train_label = []
         self.create_data()
@@ -49,9 +50,9 @@ class Meview(torch.utils.data.Dataset):
             images = [cv2.imread(p) for p in inputs]
 
             for i in range(len(images) - 30):
-                self.train_data.append(images[i:i+30])
+                self.train_data.append(images[i:i+self.peroid])
                 self.train_label.append(
-                    [1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(i, i+15)])
+                    [1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(i, i+self.peroid)])
             break
         self.train_data = torch.Tensor(np.array(self.train_data))
         self.train_label = torch.Tensor(np.array(self.train_label))
@@ -63,7 +64,7 @@ class Meview(torch.utils.data.Dataset):
         return len(self.train_data)
 
     def __getitem__(self, index):
-        return self.train_data[index], self.train_label[index], torch.Tensor([1 for _ in range(15)])
+        return self.train_data[index], self.train_label[index], torch.Tensor([1 for _ in range(self.peroid)])
 
 
 if __name__ == '__main__':

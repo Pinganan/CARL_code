@@ -1,10 +1,7 @@
 import os
 import torch
-from models.resnet_c2d import BaseModel, Classifier
+from models.resnet_c2d import BaseModel
 from models.transformer import TransformerModel
-import utils.logging as logging
-
-logger = logging.get_logger(__name__)
 
 
 def build_model(cfg):
@@ -27,21 +24,18 @@ def save_checkpoint(cfg, model, optimizer, epoch):
         "cfg": cfg,
     }
     torch.save(checkpoint, ckpt_path)
-    logger.info(f"Saving epoch {epoch} checkpoint at {ckpt_path}")
 
 
 def load_checkpoint(cfg, model, optimizer):
     path = os.path.join(cfg.LOGDIR, "checkpoints")
-    print(f"{path=}")
     if os.path.exists(path):
         names = [f for f in os.listdir(path) if "checkpoint" in f]
         if len(names) > 0:
             name = sorted(names)[-1]
             ckpt_path = os.path.join(path, name)
-            logger.info(f"Loading checkpoint at {ckpt_path}")
             checkpoint = torch.load(ckpt_path)
-            model.module.load_state_dict(checkpoint["model_state"])
-            optimizer.load_state_dict(checkpoint["optimizer_state"])
+            model.module.load_state_dict(checkpoint["model_state"], False)
+            # optimizer.load_state_dict(checkpoint["optimizer_state"])
             # cfg.update(checkpoint["cfg"])
             return checkpoint["epoch"]
     return 0
