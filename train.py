@@ -4,7 +4,7 @@ import os
 import pprint
 import torch
 import random
-from tqdm import tqdm
+from tqdm import tqdm, trange
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 
@@ -28,14 +28,20 @@ def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, summa
     total_loss = {}
 
     if du.is_root_proc():
-        train_loader = tqdm(train_loader, total=len(train_loader))
+        train_loader = tqdm(train_loader,
+                            total=len(train_loader),
+                            desc=f'[train] loss=0.000, f1=0.000, recall=0.000')
 
     for cur_iter, (videos, _labels, video_masks) in enumerate(train_loader):
         optimizer.zero_grad()
-        loss_dict = algo.compute_loss(model, videos, _labels, video_masks)
+        loss_dict, f1, recall = algo.compute_loss(model, videos, _labels, video_masks)
         loss = loss_dict["loss"]
         # Perform the backward pass.
         loss.backward()
+
+        train_loader.set_description(f"[train] {loss=:.3f}, {f1=:.3f}, {recall=:.3f}")
+        train_loader.refresh()
+
         # Update the parameters.
         if cfg.OPTIMIZER.GRAD_CLIP > 0:
             torch.nn.utils.clip_grad_norm_(
@@ -52,6 +58,10 @@ def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, summa
                               get_lr(optimizer)[0], cur_epoch)
     for key in total_loss:
         summary_writer.add_scalar(f'train/{key}', total_loss[key], cur_epoch)
+
+    train_loader.set_description(f"train {loss=:.3f} ")
+    train_loader.refresh()
+
     logger.info("epoch {}, train loss: {:.3f}".format(
         cur_epoch, total_loss["loss"]))
 
@@ -66,7 +76,7 @@ def val(cfg, val_loader, model, algo, cur_epoch, summary_writer):
 
     with torch.no_grad():
         for cur_iter, (videos, labels, video_masks) in enumerate(val_loader):
-            loss_dict = algo.compute_loss(
+            loss_dict, _, _ = algo.compute_loss(
                 model, videos, labels, video_masks, training=False)
 
             for key in loss_dict:
@@ -78,7 +88,7 @@ def val(cfg, val_loader, model, algo, cur_epoch, summary_writer):
 
     for key in total_loss:
         summary_writer.add_scalar(f'val/{key}', total_loss[key], cur_epoch)
-    logger.info("epoch {}, val loss: {:.3f}".format(
+    logger.info("epoch {}, train loss: {:.3f}".format(
         cur_epoch, total_loss["loss"]))
 
 
@@ -136,8 +146,8 @@ def main():
     start_epoch = load_checkpoint(cfg, model, optimizer)
     cfg.TRAIN.MAX_ITERS = cfg.TRAIN.MAX_EPOCHS * len(train_loader)
     scheduler = construct_scheduler(optimizer, cfg)
-
-    for cur_epoch in range(start_epoch, cfg.TRAIN.MAX_EPOCHS):
+    # for cur_epoch in range(start_epoch, cfg.TRAIN.MAX_EPOCHS):
+    for cur_epoch in range(start_epoch, start_epoch+1):
         logger.info(
             f"Traning epoch {cur_epoch}/{cfg.TRAIN.MAX_EPOCHS}, {len(train_loader)} iters each epoch")
         train(cfg, train_loader, model, optimizer,
