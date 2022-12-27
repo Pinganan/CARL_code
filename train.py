@@ -155,10 +155,12 @@ def main():
     #                                                   output_device=args.local_rank, find_unused_parameters=True)
     optimizer = construct_optimizer(model, cfg)
     algo = get_algo(cfg)
-    train_dataset = Meview(cfg).create_data(0)
+    train_dataset = Meview(cfg)
+    train_dataset.create_data(0)
     train_loader = DataLoader(train_dataset, batch_size=cfg.TRAIN.BATCH_SIZE,
                               shuffle=True, drop_last=True)
-    val_dataset = Meview(cfg).select_data(0)
+    val_dataset = Meview(cfg)
+    val_dataset.select_data(0)
     val_loader = DataLoader(val_dataset, batch_size=cfg.TRAIN.BATCH_SIZE,
                             shuffle=True, drop_last=True)
 

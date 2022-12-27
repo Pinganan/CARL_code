@@ -47,8 +47,13 @@ class Meview(torch.utils.data.Dataset):
         inputs = get_file_paths(
             f'{self.cfg.PATH_TO_DATASET}/{subject}', '.png')
         
-        images = [cv2.imread(p) for p in inputs]
-        for i in range(len(images) - 30):
+        images = []
+        for p in inputs:
+            img = cv2.imread(p)
+            assert img is not None, f"path={p} read failure"
+            images.append(img)
+        
+        for i in range(0, len(images) - 30, 2):
             self.train_data.append(images[i:i+self.peroid])
             self.train_label.append(
                 [1 if ONSET[assignID] <= i < OFFSET[assignID] else 0 for i in range(i, i+self.peroid)])
@@ -67,8 +72,13 @@ class Meview(torch.utils.data.Dataset):
             inputs = get_file_paths(
                 f'{self.cfg.PATH_TO_DATASET}/{subject}', '.png')
             
-            images = [cv2.imread(p) for p in inputs]
-            for i in range(len(images) - 30):
+            images = []
+            for p in inputs:
+                img = cv2.imread(p)
+                assert img is not None, f"path={p} read failure"
+                images.append(img)
+
+            for i in range(0, len(images) - 30, 2):
                 self.train_data.append(images[i:i+self.peroid])
                 self.train_label.append(
                     [1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(i, i+self.peroid)])
