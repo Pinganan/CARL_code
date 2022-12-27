@@ -298,7 +298,7 @@ class TransformerModel(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        res50_model = models.resnet50(pretrained=True)
+        res50_model = models.resnet50(weights='ResNet50_Weights.DEFAULT')
         if cfg.MODEL.BASE_MODEL.LAYER == 3:
             # output of layer3: 1024x14x14
             self.backbone = nn.Sequential(*list(res50_model.children())[:-3])

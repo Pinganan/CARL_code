@@ -10,7 +10,7 @@ CONFIG = edict()
 # ******************************************************************************
 
 # Directory for the experiment logs.
-CONFIG.LOGDIR = '/home/pingan/micro/CARL_code'
+CONFIG.LOGDIR = 'C:/Users/M1103176/Desktop/CARL_code'
 # Dataset for training TCC.
 # Check dataset_splits.py for full list.
 CONFIG.DATASETS = ['microexpression']
@@ -18,7 +18,7 @@ CONFIG.DATASETS = ['microexpression']
 # self-supervised mode (SimClR-like methods compare two augmented views)
 CONFIG.SSL = True
 # the name of dataset dir
-CONFIG.PATH_TO_DATASET = '/data/Users/pingan/micro_expression/obj2unlight'
+CONFIG.PATH_TO_DATASET = 'C:/Users/M1103176/Desktop/crop2OF'
 # Algorithm used for training: tcc, tcn, scl, classification.
 CONFIG.TRAINING_ALGO = 'classification'
 # Size of images/frames.
