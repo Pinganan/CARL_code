@@ -53,7 +53,7 @@ class Meview(torch.utils.data.Dataset):
             assert img is not None, f"path={p} read failure"
             images.append(img)
         
-        for i in range(0, len(images) - 30, 2):
+        for i in range(0, len(images) - 30):
             self.train_data.append(images[i:i+self.peroid])
             self.train_label.append(
                 [1 if ONSET[assignID] <= i < OFFSET[assignID] else 0 for i in range(i, i+self.peroid)])
@@ -71,6 +71,13 @@ class Meview(torch.utils.data.Dataset):
                 continue
             inputs = get_file_paths(
                 f'{self.cfg.PATH_TO_DATASET}/{subject}', '.png')
+            
+            # other features
+            inputs_strain = get_file_paths(
+                f'{self.cfg.PATH_TO_DATASET.replace("crop2OF", "crop2strain")}/{subject}', '.png')
+            inputs_rgb = get_file_paths(
+                f'{self.cfg.PATH_TO_DATASET.replace("crop2OF", "rotation2crop")}/{subject}', '.png')
+            inputs = [*inputs, *inputs_strain, *inputs_rgb]
             
             images = []
             for p in inputs:

@@ -147,6 +147,13 @@ def main():
 
     # Build the video model
     model = build_model(cfg)
+    for name, param in model.named_parameters():
+        if "classifier" in name:
+            param.requires_grad = True
+        else:
+            param.requires_grad = False
+        print(name, param.requires_grad)\
+
     torch.cuda.set_device(args.local_rank)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
