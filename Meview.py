@@ -58,12 +58,11 @@ class Meview(torch.utils.data.Dataset):
             self.train_label.append(
                 [1 if ONSET[assignID] <= i < OFFSET[assignID] else 0 for i in range(i, i+self.peroid)])
 
-        self.train_data = torch.Tensor(np.array(self.train_data))
+        self.train_data = torch.Tensor(np.array(self.train_data) / 255.0)
         self.train_label = torch.Tensor(np.array(self.train_label))
         batch, num_frames, height, width, channel = self.train_data.shape
         self.train_data = self.train_data.reshape(
             (batch, num_frames, channel, height, width))
-
 
     def create_data(self, exceptID=-1):
         for sid, subject in enumerate(SUBJECTS):
@@ -83,7 +82,7 @@ class Meview(torch.utils.data.Dataset):
                 self.train_label.append(
                     [1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(i, i+self.peroid)])
 
-        self.train_data = torch.Tensor(np.array(self.train_data))
+        self.train_data = torch.Tensor(np.array(self.train_data) / 255.0)
         self.train_label = torch.Tensor(np.array(self.train_label))
         batch, num_frames, height, width, channel = self.train_data.shape
         self.train_data = self.train_data.reshape(
