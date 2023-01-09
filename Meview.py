@@ -72,18 +72,11 @@ class Meview(torch.utils.data.Dataset):
             inputs = get_file_paths(
                 f'{self.cfg.PATH_TO_DATASET}/{subject}', '.png')
             
-            # other features
-            inputs_strain = get_file_paths(
-                f'{self.cfg.PATH_TO_DATASET.replace("crop2OF", "crop2strain")}/{subject}', '.png')
-            inputs_rgb = get_file_paths(
-                f'{self.cfg.PATH_TO_DATASET.replace("crop2OF", "rotation2crop")}/{subject}', '.png')
-            inputs = [*inputs, *inputs_strain, *inputs_rgb]
-            
             images = []
             for p in inputs:
                 img = cv2.imread(p)
                 assert img is not None, f"path={p} read failure"
-                images.append(img)
+                images.append(np.invert(img))
 
             for i in range(0, len(images) - 30, 2):
                 self.train_data.append(images[i:i+self.peroid])
@@ -110,5 +103,6 @@ if __name__ == '__main__':
     args = parse_args()
     cfg = load_config(args)
     dataset = Meview(cfg)
+    dataset.create_data(2)
     print(dataset.train_data[0].shape)
     print(dataset.train_label[0].shape)

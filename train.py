@@ -21,6 +21,10 @@ from sklearn.metrics import f1_score, recall_score, confusion_matrix
 
 
 logger = logging.get_logger(__name__)
+SUBJECTS = ["sub01_01", "sub02_01", "sub03_01", "sub05_02", "sub06_01",
+            "sub07_05", "sub07_09", "sub07_10", "sub08_01", "sub10_01",
+            "sub11_03", "sub11_05", "sub13_01", "sub14_01", "sub14_02",
+            "sub15_01", "sub15_02", "sub16_02", "sub16_03"]
 
 
 def classify_evaluation(gt, pred):
@@ -32,6 +36,7 @@ def classify_evaluation(gt, pred):
 
 
 def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, summary_writer):
+    global trainSubjectID
     model.train()
     optimizer.zero_grad()
     data_size = len(train_loader)
@@ -40,7 +45,7 @@ def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, summa
     if du.is_root_proc():
         train_loader = tqdm(train_loader,
                             total=len(train_loader),
-                            desc=f'[train-000] loss=0.000, f1=0.000, recall=0.000')
+                            desc=f'[train-{SUBJECTS[trainSubjectID]}] loss=0.000, f1=0.000, recall=0.000')
 
     groundTruth, predicts = torch.Tensor(), torch.Tensor()
     for cur_iter, (videos, _labels, video_masks) in enumerate(train_loader):
@@ -53,7 +58,7 @@ def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, summa
         groundTruth = torch.cat((groundTruth.cuda(), gts.cuda()))
         predicts = torch.cat((predicts.cuda(), preds.cuda()))
         f1, recall = classify_evaluation(groundTruth, predicts)
-        train_loader.set_description(f"[train-{cur_iter:03d}] {loss=:.3f}, {f1=:.3f}, {recall=:.3f}")
+        train_loader.set_description(f"[train-{SUBJECTS[trainSubjectID]}] {loss=:.3f}, {f1=:.3f}, {recall=:.3f}")
         train_loader.refresh()
 
         # Update the parameters.
@@ -115,7 +120,7 @@ def val(cfg, val_loader, model, algo, cur_epoch, summary_writer):
         cur_epoch, total_loss["loss"]))
 
 
-def main():
+def main(trainSubjectID):
     args = parse_args()
     cfg = load_config(args)
     setup_train_dir(cfg.LOGDIR)
@@ -148,11 +153,13 @@ def main():
     # Build the video model
     model = build_model(cfg)
     for name, param in model.named_parameters():
+        print(name)
         if "classifier" in name:
+            param.requires_grad = True
+        elif 'embed' in name:
             param.requires_grad = True
         else:
             param.requires_grad = False
-        print(name, param.requires_grad)\
 
     torch.cuda.set_device(args.local_rank)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -163,11 +170,11 @@ def main():
     optimizer = construct_optimizer(model, cfg)
     algo = get_algo(cfg)
     train_dataset = Meview(cfg)
-    train_dataset.create_data(0)
+    train_dataset.create_data(trainSubjectID)
     train_loader = DataLoader(train_dataset, batch_size=cfg.TRAIN.BATCH_SIZE,
                               shuffle=True, drop_last=True)
     val_dataset = Meview(cfg)
-    val_dataset.select_data(0)
+    val_dataset.select_data(trainSubjectID)
     val_loader = DataLoader(val_dataset, batch_size=cfg.TRAIN.BATCH_SIZE,
                             shuffle=True, drop_last=True)
 
@@ -188,4 +195,5 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    for trainSubjectID in range(19):
+        main(trainSubjectID)

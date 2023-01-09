@@ -18,7 +18,7 @@ CONFIG.DATASETS = ['microexpression']
 # self-supervised mode (SimClR-like methods compare two augmented views)
 CONFIG.SSL = True
 # the name of dataset dir
-CONFIG.PATH_TO_DATASET = '/data/Users/pingan/micro_expression/crop2OF'
+CONFIG.PATH_TO_DATASET = '/data/Users/pingan/micro_expression/crop2strain/'
 # Algorithm used for training: tcc, tcn, scl, classification.
 CONFIG.TRAINING_ALGO = 'classification'
 # Size of images/frames.
@@ -43,7 +43,7 @@ CONFIG.TRAIN = edict()
 # Number of training epoch.
 CONFIG.TRAIN.MAX_EPOCHS = 500
 # Number of samples in each batch.
-CONFIG.TRAIN.BATCH_SIZE = 1
+CONFIG.TRAIN.BATCH_SIZE = 6
 # Number of frames to use while training.
 CONFIG.TRAIN.NUM_FRAMES = 240
 
