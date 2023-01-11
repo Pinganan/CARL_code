@@ -41,18 +41,18 @@ class Meview(torch.utils.data.Dataset):
         self.peroid = 30
         self.train_data = []
         self.train_label = []
-    
+
     def select_data(self, assignID):
         subject = SUBJECTS[assignID]
         inputs = get_file_paths(
             f'{self.cfg.PATH_TO_DATASET}/{subject}', '.png')
-        
+
         images = []
         for p in inputs:
             img = cv2.imread(p)
             assert img is not None, f"path={p} read failure"
             images.append(img)
-        
+
         for i in range(0, len(images) - 30):
             self.train_data.append(images[i:i+self.peroid])
             self.train_label.append(
@@ -70,7 +70,7 @@ class Meview(torch.utils.data.Dataset):
                 continue
             inputs = get_file_paths(
                 f'{self.cfg.PATH_TO_DATASET}/{subject}', '.png')
-            
+
             images = []
             for p in inputs:
                 img = cv2.imread(p)
