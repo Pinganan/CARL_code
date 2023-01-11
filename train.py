@@ -6,7 +6,7 @@ import torch
 import random
 from tqdm import tqdm, trange
 import numpy as np
-from torch.utils.tensorboard import SummaryWriter
+from datetime import datetime
 
 import utils.distributed as du
 import utils.logging as logging
@@ -35,7 +35,7 @@ def classify_evaluation(gt, pred):
     return f1, recall
 
 
-def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, summary_writer):
+def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, writer):
     global trainSubjectID
     model.train()
     optimizer.zero_grad()
@@ -50,7 +50,8 @@ def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, summa
     groundTruth, predicts = torch.Tensor(), torch.Tensor()
     for cur_iter, (videos, _labels, video_masks) in enumerate(train_loader):
         optimizer.zero_grad()
-        loss_dict, gts, preds = algo.compute_loss(model, videos, _labels, video_masks)
+        loss_dict, gts, preds = algo.compute_loss(
+            model, videos, _labels, video_masks)
         loss = loss_dict["loss"]
         # Perform the backward pass.
         loss.backward()
@@ -58,7 +59,8 @@ def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, summa
         groundTruth = torch.cat((groundTruth.cuda(), gts.cuda()))
         predicts = torch.cat((predicts.cuda(), preds.cuda()))
         f1, recall = classify_evaluation(groundTruth, predicts)
-        train_loader.set_description(f"[train-{SUBJECTS[trainSubjectID]}] {loss=:.3f}, {f1=:.3f}, {recall=:.3f}")
+        train_loader.set_description(
+            f"[train-{SUBJECTS[trainSubjectID]}] {loss=:.3f}, {f1=:.3f}, {recall=:.3f}")
         train_loader.refresh()
 
         # Update the parameters.
@@ -73,15 +75,13 @@ def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, summa
                 total_loss[key] = 0
             # total_loss[key] += du.all_reduce([loss_dict[key]]
             #                                  )[0].item() / data_size
-    summary_writer.add_scalar('train/learning_rate',
-                              get_lr(optimizer)[0], cur_epoch)
-    for key in total_loss:
-        summary_writer.add_scalar(f'train/{key}', total_loss[key], cur_epoch)
 
     f1, recall = classify_evaluation(groundTruth.cuda(), predicts.cuda())
-    tn, fp, fn, tp = confusion_matrix(groundTruth.cpu(), predicts.cpu(), labels=[0,1]).ravel()
-    print(f"[train results] {tp=:2d}, {tn=:2d}, {fp=:2d}, {fn=:2d}, {f1=:.3f}, {recall=:.3f}")
-
+    tn, fp, fn, tp = confusion_matrix(
+        groundTruth.cpu(), predicts.cpu(), labels=[0, 1]).ravel()
+    # print(
+    #     f"[train results] {tp=:2d}, {tn=:2d}, {fp=:2d}, {fn=:2d}, {f1=:.3f}, {recall=:.3f}")
+    writer.write(f"[train results] {tp=:2d}, {tn=:2d}, {fp=:2d}, {fn=:2d}, {f1=:.3f}, {recall=:.3f}\n")
 
     logger.info("epoch {}, train loss: {:.3f}".format(
         cur_epoch, total_loss["loss"]))
@@ -90,7 +90,7 @@ def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, summa
         scheduler.step()
 
 
-def val(cfg, val_loader, model, algo, cur_epoch, summary_writer):
+def val(cfg, val_loader, model, algo, cur_epoch, writer):
     model.eval()
     data_size = len(val_loader)
     total_loss = {}
@@ -111,19 +111,20 @@ def val(cfg, val_loader, model, algo, cur_epoch, summary_writer):
                 #                                  )[0].item() / data_size
 
     f1, recall = classify_evaluation(groundTruth.cuda(), predicts.cuda())
-    tn, fp, fn, tp = confusion_matrix(groundTruth.cpu(), predicts.cpu(), labels=[0,1]).ravel()
-    print(f"[-val- results] {tp=:2d}, {tn=:2d}, {fp=:2d}, {fn=:2d}, {f1=:.3f}, {recall=:.3f}\n")
+    tn, fp, fn, tp = confusion_matrix(
+        groundTruth.cpu(), predicts.cpu(), labels=[0, 1]).ravel()
+    # print(
+    #     f"[-val- results] {tp=:2d}, {tn=:2d}, {fp=:2d}, {fn=:2d}, {f1=:.3f}, {recall=:.3f}\n")
+    writer.write(f"[-val- results] {tp=:2d}, {tn=:2d}, {fp=:2d}, {fn=:2d}, {f1=:.3f}, {recall=:.3f}\n")
 
-    for key in total_loss:
-        summary_writer.add_scalar(f'val/{key}', total_loss[key], cur_epoch)
     logger.info("epoch {}, train loss: {:.3f}".format(
         cur_epoch, total_loss["loss"]))
 
 
-def main(trainSubjectID):
+def main(trainSubjectID, writer):
     args = parse_args()
     cfg = load_config(args)
-    setup_train_dir(cfg.LOGDIR)
+    # setup_train_dir(cfg.LOGDIR)
     cfg.NUM_GPUS = torch.cuda.device_count()  # num_gpus_per_machine
     args.world_size = int(os.getenv('WORLD_SIZE', 0))  # total_gpus
     if os.environ.get('OMPI_COMM_WORLD_SIZE') is None:
@@ -144,7 +145,6 @@ def main(trainSubjectID):
 
     # distributed logging and ignore warning message
     logging.setup_logging(cfg.LOGDIR)
-    summary_writer = SummaryWriter(os.path.join(cfg.LOGDIR, 'train_logs'))
 
     # Print config.
     logger.info("Train with config:")
@@ -153,11 +153,11 @@ def main(trainSubjectID):
     # Build the video model
     model = build_model(cfg)
     for name, param in model.named_parameters():
-        # print(name)
+        print(name)
         if "classifier" in name:
             param.requires_grad = True
         elif 'embed' in name:
-            param.requires_grad = False
+            param.requires_grad = True
         else:
             param.requires_grad = False
 
@@ -182,18 +182,23 @@ def main(trainSubjectID):
     start_epoch = load_checkpoint(cfg, model, optimizer)
     cfg.TRAIN.MAX_ITERS = cfg.TRAIN.MAX_EPOCHS * len(train_loader)
     scheduler = construct_scheduler(optimizer, cfg)
-    for cur_epoch in range(start_epoch, cfg.TRAIN.MAX_EPOCHS -cfg.TRAIN.MAX_EPOCHS+start_epoch+3):
+    for cur_epoch in range(start_epoch, cfg.TRAIN.MAX_EPOCHS - cfg.TRAIN.MAX_EPOCHS+start_epoch+3):
         logger.info(
             f"Traning epoch {cur_epoch}/{cfg.TRAIN.MAX_EPOCHS}, {len(train_loader)} iters each epoch")
         train(cfg, train_loader, model, optimizer,
-              scheduler, algo, cur_epoch, summary_writer)
-        val(cfg, val_loader, model, algo, cur_epoch, summary_writer)
-        if du.is_root_proc() and ((cur_epoch+1) % cfg.CHECKPOINT.SAVE_INTERVAL == 0 or cur_epoch == cfg.TRAIN.MAX_EPOCHS-1):
-            save_checkpoint(cfg, model, optimizer, cur_epoch)
+              scheduler, algo, cur_epoch, writer)
+        val(cfg, val_loader, model, algo, cur_epoch, writer)
+        # if du.is_root_proc() and ((cur_epoch+1) % cfg.CHECKPOINT.SAVE_INTERVAL == 0 or cur_epoch == cfg.TRAIN.MAX_EPOCHS-1):
+        #     save_checkpoint(cfg, model, optimizer, cur_epoch)
         du.synchronize()
     # torch.distributed.destroy_process_group()
 
 
 if __name__ == '__main__':
     for trainSubjectID in range(19):
-        main(trainSubjectID)
+
+        now = datetime.now()
+        writer = open(
+            f"./train_logs/{now.year}_{now.month:02d}_{now.day:02d}_{now.hour:02d}_{SUBJECTS[trainSubjectID]}.txt", "w")
+        main(trainSubjectID, writer)
+        writer.close()
