@@ -153,11 +153,11 @@ def main(trainSubjectID):
     # Build the video model
     model = build_model(cfg)
     for name, param in model.named_parameters():
-        print(name)
+        # print(name)
         if "classifier" in name:
             param.requires_grad = True
         elif 'embed' in name:
-            param.requires_grad = True
+            param.requires_grad = False
         else:
             param.requires_grad = False
 
@@ -182,7 +182,7 @@ def main(trainSubjectID):
     start_epoch = load_checkpoint(cfg, model, optimizer)
     cfg.TRAIN.MAX_ITERS = cfg.TRAIN.MAX_EPOCHS * len(train_loader)
     scheduler = construct_scheduler(optimizer, cfg)
-    for cur_epoch in range(start_epoch, cfg.TRAIN.MAX_EPOCHS -cfg.TRAIN.MAX_EPOCHS+start_epoch+10):
+    for cur_epoch in range(start_epoch, cfg.TRAIN.MAX_EPOCHS -cfg.TRAIN.MAX_EPOCHS+start_epoch+3):
         logger.info(
             f"Traning epoch {cur_epoch}/{cfg.TRAIN.MAX_EPOCHS}, {len(train_loader)} iters each epoch")
         train(cfg, train_loader, model, optimizer,
