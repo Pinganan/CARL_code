@@ -71,32 +71,33 @@ class Meview(torch.utils.data.Dataset):
                 continue
             inputs = get_file_paths(
                 f'{self.cfg.PATH_TO_DATASET}/{subject}', '.png')
-            inputs = get_file_paths(f"/data/Users/pingan/micro_expression/crop2strain/{subject}", ".png")
 
             images = []
             for p in inputs:
                 img = cv2.imread(p)
                 assert img is not None, f"path={p} read failure"
-                # images.append(np.invert(img))
-                images.append(img[:, :, ::-1])
+                images.append(np.invert(img))
 
             for i in range(0, len(images) - self.peroid, 1):
                 self.train_data.append(images[i:i+self.peroid])
                 self.train_label.append(
                     [1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(i, i+self.peroid)])
 
-            break
-
-        # self.train_data = torch.Tensor(np.array(self.train_data))
-        self.train_data = torch.Tensor(np.array(self.train_data) / 255.0, dtype=torch.float32)
-        self.train_label = torch.Tensor(np.array(self.train_label), dtype=torch.long)
-        self.train_data = self.train_data.permute(0, 1, 4, 2, 3)
+        self.train_data = torch.Tensor(np.array(self.train_data))
+        # self.train_data = torch.Tensor(np.array(self.train_data) / 255.0)
+        self.train_label = torch.Tensor(np.array(self.train_label))
+        batch, num_frames, height, width, channel = self.train_data.shape
+        self.train_data = self.train_data.reshape(
+            (batch, num_frames, channel, height, width))
 
     def __len__(self):
         return len(self.train_data)
 
     def __getitem__(self, index):
-        return self.train_data[index], self.train_label[index], torch.Tensor([1 for _ in range(self.peroid)])
+        if torch.cuda.is_available():
+            return self.train_data[index].cuda(), self.train_label[index].cuda(), torch.Tensor([1 for _ in range(self.peroid)]).cuda()
+        else:
+            return self.train_data[index], self.train_label[index], torch.Tensor([1 for _ in range(self.peroid)])
 
 
 if __name__ == '__main__':
@@ -104,8 +105,5 @@ if __name__ == '__main__':
     cfg = load_config(args)
     dataset = Meview(cfg)
     dataset.create_data(2)
-    image = dataset.train_data[0, 1]
-    image = image.permute(1,2,0).numpy()
-    cv2.imwrite("./test.png", image)
-    # print(dataset.train_data[0].shape)
-    # print(dataset.train_label[0].shape)
+    print(dataset.train_data[0].shape)
+    print(dataset.train_label[0].shape)

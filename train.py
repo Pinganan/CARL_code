@@ -81,7 +81,7 @@ def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, write
         groundTruth.cpu(), predicts.cpu(), labels=[0, 1]).ravel()
     # print(
     #     f"[train results] {tp=:2d}, {tn=:2d}, {fp=:2d}, {fn=:2d}, {f1=:.3f}, {recall=:.3f}")
-    writer.write(f"[train results] {tp=:2d}, {tn=:2d}, {fp=:2d}, {fn=:2d}, {f1=:.3f}, {recall=:.3f}\n")
+    writer.write(f"[train results] {tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {f1=:.3f}, {recall=:.3f}\n")
 
     logger.info("epoch {}, train loss: {:.3f}".format(
         cur_epoch, total_loss["loss"]))
@@ -115,7 +115,7 @@ def val(cfg, val_loader, model, algo, cur_epoch, writer):
         groundTruth.cpu(), predicts.cpu(), labels=[0, 1]).ravel()
     # print(
     #     f"[-val- results] {tp=:2d}, {tn=:2d}, {fp=:2d}, {fn=:2d}, {f1=:.3f}, {recall=:.3f}\n")
-    writer.write(f"[-val- results] {tp=:2d}, {tn=:2d}, {fp=:2d}, {fn=:2d}, {f1=:.3f}, {recall=:.3f}\n")
+    writer.write(f"[-val- results] {tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {f1=:.3f}, {recall=:.3f}\n")
 
     logger.info("epoch {}, train loss: {:.3f}".format(
         cur_epoch, total_loss["loss"]))
@@ -153,10 +153,8 @@ def main(trainSubjectID, writer):
     # Build the video model
     model = build_model(cfg)
     for name, param in model.named_parameters():
-        print(name)
+        # print(name)
         if "classifier" in name:
-            param.requires_grad = True
-        elif 'embed' in name:
             param.requires_grad = True
         else:
             param.requires_grad = False
@@ -169,14 +167,13 @@ def main(trainSubjectID, writer):
     #                                                   output_device=args.local_rank, find_unused_parameters=True)
     optimizer = construct_optimizer(model, cfg)
     algo = get_algo(cfg)
-    train_dataset = Meview(cfg)
-    train_dataset.create_data(trainSubjectID)
-    train_loader = DataLoader(train_dataset, batch_size=cfg.TRAIN.BATCH_SIZE,
-                              shuffle=True, drop_last=True)
-    val_dataset = Meview(cfg)
-    val_dataset.select_data(trainSubjectID)
-    val_loader = DataLoader(val_dataset, batch_size=cfg.TRAIN.BATCH_SIZE,
-                            shuffle=True, drop_last=True)
+    # train_dataset = Meview(cfg)
+    # train_dataset.create_data(trainSubjectID)
+    # train_loader = DataLoader(train_dataset, batch_size=cfg.TRAIN.BATCH_SIZE,
+    #                           shuffle=True)
+    # val_dataset = Meview(cfg)
+    # val_dataset.select_data(trainSubjectID)
+    # val_loader = DataLoader(val_dataset, batch_size=cfg.TRAIN.BATCH_SIZE)
 
     """Trains model and evaluates on relevant downstream tasks."""
     start_epoch = load_checkpoint(cfg, model, optimizer)
