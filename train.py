@@ -1,6 +1,5 @@
 # coding=utf-8
 
-import os
 import torch
 from tqdm import tqdm
 from datetime import datetime
@@ -20,8 +19,6 @@ SUBJECTS = ["sub01_01", "sub02_01", "sub03_01", "sub05_02", "sub06_01",
 
 
 def classify_evaluation(gt, pred):
-    gt = gt.cpu()
-    pred = pred.cpu()
     f1 = f1_score(gt, pred, zero_division=1)
     recall = recall_score(gt, pred, zero_division=1)
     return f1, recall
@@ -35,16 +32,19 @@ def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, write
     train_loader = tqdm(train_loader, total=len(train_loader),
                         desc=f'[train-{SUBJECTS[trainSubjectID]}] loss=0.000, f1=0.000, recall=0.000')
 
-    groundTruth, predicts = torch.Tensor(), torch.Tensor()
-    for videos, _labels, video_masks in train_loader:
+    groundTruth, predicts = [], []
+    for videos, labels, video_masks in train_loader:
         optimizer.zero_grad()
+        videos = videos.cuda()
+        labels = labels.cuda()
+        video_masks = video_masks.cuda()
         loss_dict, gts, preds = algo.compute_loss(
-            model, videos, _labels, video_masks)
+            model, videos, labels, video_masks)
         loss = loss_dict["loss"]
         loss.backward()
 
-        groundTruth = torch.cat((groundTruth.cuda(), gts.cuda()))
-        predicts = torch.cat((predicts.cuda(), preds.cuda()))
+        groundTruth = [*groundTruth, *gts.cpu()]
+        predicts = [*predicts, *preds.cpu()]
         f1, recall = classify_evaluation(groundTruth, predicts)
         train_loader.set_description(
             f"[train-{SUBJECTS[trainSubjectID]}] {loss=:.3f}, {f1=:.3f}, {recall=:.3f}")
@@ -61,9 +61,9 @@ def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, write
             if key not in total_loss:
                 total_loss[key] = 0
 
-    f1, recall = classify_evaluation(groundTruth.cuda(), predicts.cuda())
+    f1, recall = classify_evaluation(groundTruth, predicts)
     tn, fp, fn, tp = confusion_matrix(
-        groundTruth.cpu(), predicts.cpu(), labels=[0, 1]).ravel()
+        groundTruth, predicts, labels=[0, 1]).ravel()
     writer.write(
         f"[train results] {tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {f1=:.3f}, {recall=:.3f}\n")
 
@@ -78,19 +78,22 @@ def val(val_loader, model, algo, writer):
     groundTruth, predicts = torch.Tensor(), torch.Tensor()
     with torch.no_grad():
         for videos, labels, video_masks in val_loader:
+            videos = videos.cuda()
+            labels = labels.cuda()
+            video_masks = video_masks.cuda()
             loss_dict, gts, preds = algo.compute_loss(
                 model, videos, labels, video_masks, training=False)
 
-            groundTruth = torch.cat((groundTruth.cuda(), gts.cuda()))
-            predicts = torch.cat((predicts.cuda(), preds.cuda()))
+            groundTruth = [*groundTruth, *gts.cpu()]
+            predicts = [*predicts, *preds.cpu()]
             for key in loss_dict:
                 loss_dict[key][torch.isnan(loss_dict[key])] = 0
                 if key not in total_loss:
                     total_loss[key] = 0
 
-    f1, recall = classify_evaluation(groundTruth.cuda(), predicts.cuda())
+    f1, recall = classify_evaluation(groundTruth, predicts)
     tn, fp, fn, tp = confusion_matrix(
-        groundTruth.cpu(), predicts.cpu(), labels=[0, 1]).ravel()
+        groundTruth, predicts, labels=[0, 1]).ravel()
     writer.write(
         f"[-val- results] {tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {f1=:.3f}, {recall=:.3f}\n")
 
@@ -100,9 +103,9 @@ def main(trainSubjectID, writer):
     cfg = load_config(args)
 
     algo = get_algo(cfg)
+    model = build_model(cfg)
     optimizer = construct_optimizer(model, cfg)
     scheduler = construct_scheduler(optimizer, cfg)
-    model = build_model(cfg)
     load_checkpoint(cfg, model, optimizer)
     for name, param in model.named_parameters():
         if "classifier" in name:

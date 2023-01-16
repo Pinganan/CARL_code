@@ -35,5 +35,5 @@ def load_checkpoint(cfg, model, optimizer):
             ckpt_path = os.path.join(path, name)
             checkpoint = torch.load(ckpt_path)
             model.load_state_dict(checkpoint["model_state"], False)
-            optimizer.load_state_dict(checkpoint["optimizer_state"])
-            cfg.update(checkpoint["cfg"])
+            # optimizer.load_state_dict(checkpoint["optimizer_state"])
+            # cfg.update(checkpoint["cfg"])
