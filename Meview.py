@@ -1,12 +1,12 @@
 # coding=utf-8
 
-import torch
 import re
 import cv2
 import glob
+import torch
 import numpy as np
+from torchvision.io import read_image
 from utils.parser import parse_args, load_config
-from torchvision import transforms
 
 
 SUBJECTS = ["sub01_01", "sub02_01", "sub03_01", "sub05_02", "sub06_01",
@@ -34,63 +34,39 @@ def get_file_paths(root, file_type="/"):
     return paths
 
 
-# batch_size, num_steps, c, h, w = x.shape
 class Meview(torch.utils.data.Dataset):
     def __init__(self, cfg):
         self.cfg = cfg
         self.peroid = 30
-        self.train_data = []
-        self.train_label = []
 
     def select_data(self, assignID):
         subject = SUBJECTS[assignID]
-        inputs = get_file_paths(
+        input_paths = get_file_paths(
             f'{self.cfg.PATH_TO_DATASET}/{subject}', '.png')
+        images = torch.stack([read_image(path) for path in input_paths])
+        labels = torch.Tensor([1 if ONSET[assignID] <= i < OFFSET[assignID] else 0 for i in range(len(images))])
+        self.train_data = images.unfold(0, self.peroid, 1).type(torch.float32) / 255.0
+        self.train_data = self.train_data.permute(0, 4, 1, 2, 3)
+        self.train_label = labels.unfold(0, self.peroid, 1).type(torch.long)
 
-        images = []
-        for p in inputs:
-            img = cv2.imread(p)
-            assert img is not None, f"path={p} read failure"
-            images.append(img)
-
-        for i in range(0, len(images) - 30):
-            self.train_data.append(images[i:i+self.peroid])
-            self.train_label.append(
-                [1 if ONSET[assignID] <= i < OFFSET[assignID] else 0 for i in range(i, i+self.peroid)])
-
-        self.train_data = torch.Tensor(np.array(self.train_data))
-        # self.train_data = torch.Tensor(np.array(self.train_data) / 255.0)
-        self.train_label = torch.Tensor(np.array(self.train_label))
-        batch, num_frames, height, width, channel = self.train_data.shape
-        self.train_data = self.train_data.reshape(
-            (batch, num_frames, channel, height, width))
-
+    # format-> batch_size, num_steps, c, h, w = x.shape
     def create_data(self, exceptID=-1):
+        train_data, train_label = [], []
         for sid, subject in enumerate(SUBJECTS):
             if sid == exceptID:
                 continue
-            inputs = get_file_paths(
+            input_paths = get_file_paths(
                 f'{self.cfg.PATH_TO_DATASET}/{subject}', '.png')
-            inputs = get_file_paths(f"/data/Users/pingan/micro_expression/crop2strain/{subject}", ".png")
-
-            images = []
-            for p in inputs:
-                img = cv2.imread(p)
-                assert img is not None, f"path={p} read failure"
-                # images.append(np.invert(img))
-                images.append(img[:, :, ::-1])
-
-            for i in range(0, len(images) - self.peroid, 1):
-                self.train_data.append(images[i:i+self.peroid])
-                self.train_label.append(
-                    [1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(i, i+self.peroid)])
+            images = torch.stack([read_image(path) for path in input_paths])
+            labels = torch.Tensor([1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(len(images))])
+            train_data = [*train_data, *images.unfold(0, self.peroid, 1)]
+            train_label = [*train_label, *labels.unfold(0, self.peroid, 1)]
 
             break
 
-        # self.train_data = torch.Tensor(np.array(self.train_data))
-        self.train_data = torch.Tensor(np.array(self.train_data) / 255.0, dtype=torch.float32)
-        self.train_label = torch.Tensor(np.array(self.train_label), dtype=torch.long)
-        self.train_data = self.train_data.permute(0, 1, 4, 2, 3)
+        self.train_data = torch.stack(train_data).type(torch.float32) / 255.0
+        self.train_data = self.train_data.permute(0, 4, 1, 2, 3)
+        self.train_label = torch.stack(train_label).type(torch.long)
 
     def __len__(self):
         return len(self.train_data)
@@ -103,9 +79,6 @@ if __name__ == '__main__':
     args = parse_args()
     cfg = load_config(args)
     dataset = Meview(cfg)
-    dataset.create_data(2)
-    image = dataset.train_data[0, 1]
-    image = image.permute(1,2,0).numpy()
-    cv2.imwrite("./test.png", image)
-    # print(dataset.train_data[0].shape)
-    # print(dataset.train_label[0].shape)
+    dataset.select_data(2)
+    # image = dataset.train_data[0, 2].permute(1, 2, 0).numpy()
+    # cv2.imwrite("./test.png", image[:, :, ::-1])

@@ -1,26 +1,18 @@
 # coding=utf-8
 
 import os
-import pprint
 import torch
-import random
-from tqdm import tqdm, trange
-import numpy as np
+from tqdm import tqdm
 from datetime import datetime
-
-import utils.distributed as du
-import utils.logging as logging
-from utils.parser import parse_args, load_config, setup_train_dir
-from models import build_model, save_checkpoint, load_checkpoint
-from utils.optimizer import construct_optimizer, construct_scheduler, get_lr
+from utils.parser import parse_args, load_config
+from models import build_model, load_checkpoint
+from utils.optimizer import construct_optimizer, construct_scheduler
 from Meview import Meview
 from torch.utils.data import DataLoader
 from algos import get_algo
-from evaluation import get_tasks
 from sklearn.metrics import f1_score, recall_score, confusion_matrix
 
 
-logger = logging.get_logger(__name__)
 SUBJECTS = ["sub01_01", "sub02_01", "sub03_01", "sub05_02", "sub06_01",
             "sub07_05", "sub07_09", "sub07_10", "sub08_01", "sub10_01",
             "sub11_03", "sub11_05", "sub13_01", "sub14_01", "sub14_02",
@@ -39,21 +31,16 @@ def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, write
     global trainSubjectID
     model.train()
     optimizer.zero_grad()
-    data_size = len(train_loader)
     total_loss = {}
-
-    if du.is_root_proc():
-        train_loader = tqdm(train_loader,
-                            total=len(train_loader),
-                            desc=f'[train-{SUBJECTS[trainSubjectID]}] loss=0.000, f1=0.000, recall=0.000')
+    train_loader = tqdm(train_loader, total=len(train_loader),
+                        desc=f'[train-{SUBJECTS[trainSubjectID]}] loss=0.000, f1=0.000, recall=0.000')
 
     groundTruth, predicts = torch.Tensor(), torch.Tensor()
-    for cur_iter, (videos, _labels, video_masks) in enumerate(train_loader):
+    for videos, _labels, video_masks in train_loader:
         optimizer.zero_grad()
         loss_dict, gts, preds = algo.compute_loss(
             model, videos, _labels, video_masks)
         loss = loss_dict["loss"]
-        # Perform the backward pass.
         loss.backward()
 
         groundTruth = torch.cat((groundTruth.cuda(), gts.cuda()))
@@ -73,31 +60,24 @@ def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, write
             loss_dict[key][torch.isnan(loss_dict[key])] = 0
             if key not in total_loss:
                 total_loss[key] = 0
-            # total_loss[key] += du.all_reduce([loss_dict[key]]
-            #                                  )[0].item() / data_size
 
     f1, recall = classify_evaluation(groundTruth.cuda(), predicts.cuda())
     tn, fp, fn, tp = confusion_matrix(
         groundTruth.cpu(), predicts.cpu(), labels=[0, 1]).ravel()
-    # print(
-    #     f"[train results] {tp=:2d}, {tn=:2d}, {fp=:2d}, {fn=:2d}, {f1=:.3f}, {recall=:.3f}")
-    writer.write(f"[train results] {tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {f1=:.3f}, {recall=:.3f}\n")
-
-    logger.info("epoch {}, train loss: {:.3f}".format(
-        cur_epoch, total_loss["loss"]))
+    writer.write(
+        f"[train results] {tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {f1=:.3f}, {recall=:.3f}\n")
 
     if cur_epoch != cfg.TRAIN.MAX_EPOCHS-1:
         scheduler.step()
 
 
-def val(cfg, val_loader, model, algo, cur_epoch, writer):
+def val(val_loader, model, algo, writer):
     model.eval()
-    data_size = len(val_loader)
     total_loss = {}
 
     groundTruth, predicts = torch.Tensor(), torch.Tensor()
     with torch.no_grad():
-        for cur_iter, (videos, labels, video_masks) in enumerate(val_loader):
+        for videos, labels, video_masks in val_loader:
             loss_dict, gts, preds = algo.compute_loss(
                 model, videos, labels, video_masks, training=False)
 
@@ -107,93 +87,48 @@ def val(cfg, val_loader, model, algo, cur_epoch, writer):
                 loss_dict[key][torch.isnan(loss_dict[key])] = 0
                 if key not in total_loss:
                     total_loss[key] = 0
-                # total_loss[key] += du.all_reduce([loss_dict[key]]
-                #                                  )[0].item() / data_size
 
     f1, recall = classify_evaluation(groundTruth.cuda(), predicts.cuda())
     tn, fp, fn, tp = confusion_matrix(
         groundTruth.cpu(), predicts.cpu(), labels=[0, 1]).ravel()
-    # print(
-    #     f"[-val- results] {tp=:2d}, {tn=:2d}, {fp=:2d}, {fn=:2d}, {f1=:.3f}, {recall=:.3f}\n")
-    writer.write(f"[-val- results] {tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {f1=:.3f}, {recall=:.3f}\n")
-
-    logger.info("epoch {}, train loss: {:.3f}".format(
-        cur_epoch, total_loss["loss"]))
+    writer.write(
+        f"[-val- results] {tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {f1=:.3f}, {recall=:.3f}\n")
 
 
 def main(trainSubjectID, writer):
     args = parse_args()
     cfg = load_config(args)
-    # setup_train_dir(cfg.LOGDIR)
-    cfg.NUM_GPUS = torch.cuda.device_count()  # num_gpus_per_machine
-    args.world_size = int(os.getenv('WORLD_SIZE', 0))  # total_gpus
-    if os.environ.get('OMPI_COMM_WORLD_SIZE') is None:
-        args.rank = args.local_rank
-    else:
-        args.node_rank = int(os.getenv('OMPI_COMM_WORLD_RANK'))
-        args.rank = args.node_rank * torch.cuda.device_count() + args.local_rank
-    logger.info(f'Node info: rank {args.rank} of world size {args.world_size}')
-    cfg.args = args
-    # torch.distributed.init_process_group(backend='nccl', init_method='env://')
 
-    # Set up environment.
-    du.init_distributed_training(cfg)
-    # Set random seed from configs.
-    random.seed(cfg.RNG_SEED)
-    np.random.seed(cfg.RNG_SEED)
-    torch.manual_seed(cfg.RNG_SEED)
-
-    # distributed logging and ignore warning message
-    logging.setup_logging(cfg.LOGDIR)
-
-    # Print config.
-    logger.info("Train with config:")
-    logger.info(pprint.pformat(cfg))
-
-    # Build the video model
+    algo = get_algo(cfg)
+    optimizer = construct_optimizer(model, cfg)
+    scheduler = construct_scheduler(optimizer, cfg)
     model = build_model(cfg)
+    load_checkpoint(cfg, model, optimizer)
     for name, param in model.named_parameters():
-        # print(name)
         if "classifier" in name:
             param.requires_grad = True
         else:
             param.requires_grad = False
+    model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 
-    torch.cuda.set_device(args.local_rank)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
-    # model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-    # model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
-    #                                                   output_device=args.local_rank, find_unused_parameters=True)
-    optimizer = construct_optimizer(model, cfg)
-    algo = get_algo(cfg)
-    # train_dataset = Meview(cfg)
-    # train_dataset.create_data(trainSubjectID)
-    # train_loader = DataLoader(train_dataset, batch_size=cfg.TRAIN.BATCH_SIZE,
-    #                           shuffle=True)
-    # val_dataset = Meview(cfg)
-    # val_dataset.select_data(trainSubjectID)
-    # val_loader = DataLoader(val_dataset, batch_size=cfg.TRAIN.BATCH_SIZE)
+    train_dataset = Meview(cfg)
+    train_dataset.create_data(trainSubjectID)
+    train_loader = DataLoader(train_dataset, batch_size=cfg.TRAIN.BATCH_SIZE,
+                              shuffle=True)
+    val_dataset = Meview(cfg)
+    val_dataset.select_data(trainSubjectID)
+    val_loader = DataLoader(val_dataset, batch_size=cfg.TRAIN.BATCH_SIZE)
 
     """Trains model and evaluates on relevant downstream tasks."""
-    start_epoch = load_checkpoint(cfg, model, optimizer)
-    cfg.TRAIN.MAX_ITERS = cfg.TRAIN.MAX_EPOCHS * len(train_loader)
-    scheduler = construct_scheduler(optimizer, cfg)
-    for cur_epoch in range(start_epoch, cfg.TRAIN.MAX_EPOCHS - cfg.TRAIN.MAX_EPOCHS+start_epoch+3):
-        logger.info(
-            f"Traning epoch {cur_epoch}/{cfg.TRAIN.MAX_EPOCHS}, {len(train_loader)} iters each epoch")
+    for cur_epoch in range(3):
         train(cfg, train_loader, model, optimizer,
               scheduler, algo, cur_epoch, writer)
-        val(cfg, val_loader, model, algo, cur_epoch, writer)
-        # if du.is_root_proc() and ((cur_epoch+1) % cfg.CHECKPOINT.SAVE_INTERVAL == 0 or cur_epoch == cfg.TRAIN.MAX_EPOCHS-1):
-        #     save_checkpoint(cfg, model, optimizer, cur_epoch)
-        du.synchronize()
-    # torch.distributed.destroy_process_group()
+        val(val_loader, model, algo, writer)
+        break
 
 
 if __name__ == '__main__':
     for trainSubjectID in range(19):
-
         now = datetime.now()
         writer = open(
             f"./train_logs/{now.year}_{now.month:02d}_{now.day:02d}_{now.hour:02d}_{SUBJECTS[trainSubjectID]}.txt", "w")
