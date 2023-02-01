@@ -1,10 +1,8 @@
 # coding=utf-8
 
 import re
-import cv2
 import glob
 import torch
-import numpy as np
 from torchvision.io import read_image
 from utils.parser import parse_args, load_config
 
@@ -44,10 +42,12 @@ class Meview(torch.utils.data.Dataset):
         input_paths = get_file_paths(
             f'{self.cfg.PATH_TO_DATASET}/{subject}', '.png')
         images = torch.stack([read_image(path) for path in input_paths])
-        labels = torch.Tensor([1 if ONSET[assignID] <= i < OFFSET[assignID] else 0 for i in range(len(images))])
-        self.train_data = images.unfold(0, self.peroid, 1).type(torch.float32) / 255.0
+        labels = torch.Tensor(
+            [1 if ONSET[assignID] <= i < OFFSET[assignID] else 0 for i in range(len(images))])
+        self.train_data = images.unfold(
+            0, self.peroid, 2).type(torch.float32) / 255.0
         self.train_data = self.train_data.permute(0, 4, 1, 2, 3)
-        self.train_label = labels.unfold(0, self.peroid, 1).type(torch.long)
+        self.train_label = labels.unfold(0, self.peroid, 2).type(torch.long)
 
     # format-> batch_size, num_steps, c, h, w = x.shape
     def create_data(self, exceptID=-1):
@@ -58,12 +58,10 @@ class Meview(torch.utils.data.Dataset):
             input_paths = get_file_paths(
                 f'{self.cfg.PATH_TO_DATASET}/{subject}', '.png')
             images = torch.stack([read_image(path) for path in input_paths])
-            labels = torch.Tensor([1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(len(images))])
-            train_data = [*train_data, *images.unfold(0, self.peroid, 1)]
-            train_label = [*train_label, *labels.unfold(0, self.peroid, 1)]
-
-            break
-
+            labels = torch.Tensor(
+                [1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(len(images))])
+            train_data = [*train_data, *images.unfold(0, self.peroid, 2)]
+            train_label = [*train_label, *labels.unfold(0, self.peroid, 2)]
         self.train_data = torch.stack(train_data).type(torch.float32) / 255.0
         self.train_data = self.train_data.permute(0, 4, 1, 2, 3)
         self.train_label = torch.stack(train_label).type(torch.long)
@@ -75,10 +73,49 @@ class Meview(torch.utils.data.Dataset):
         return self.train_data[index], self.train_label[index], torch.Tensor([1 for _ in range(self.peroid)])
 
 
+class CheatMeview(Meview):
+    def __init__(self, cfg):
+        super().__init__(cfg)
+
+    def select_data(self, assignID):
+        subject = SUBJECTS[assignID]
+        input_paths = get_file_paths(
+            f'{self.cfg.PATH_TO_DATASET}/{subject}', '.png')
+        images = torch.stack([read_image(path) if ONSET[assignID] <= i < OFFSET[assignID] else self.toCheat(
+            read_image(path)) for i, path in enumerate(input_paths)])
+        labels = torch.Tensor(
+            [1 if ONSET[assignID] <= i < OFFSET[assignID] else 0 for i in range(len(images))])
+        self.train_data = images.unfold(
+            0, self.peroid, 2).type(torch.float32) / 255.0
+        self.train_data = self.train_data.permute(0, 4, 1, 2, 3)
+        self.train_label = labels.unfold(0, self.peroid, 2).type(torch.long)
+
+    # format-> batch_size, num_steps, c, h, w = x.shape
+    def create_data(self, exceptID=-1):
+        train_data, train_label = [], []
+        for sid, subject in enumerate(SUBJECTS):
+            if sid == exceptID:
+                continue
+            input_paths = get_file_paths(
+                f'{self.cfg.PATH_TO_DATASET}/{subject}', '.png')
+            images = torch.stack([read_image(path) if ONSET[sid] <= i < OFFSET[sid] else self.toCheat(
+                read_image(path)) for i, path in enumerate(input_paths)])
+            labels = torch.Tensor(
+                [1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(len(images))])
+            train_data = [*train_data, *images.unfold(0, self.peroid, 2)]
+            train_label = [*train_label, *labels.unfold(0, self.peroid, 2)]
+        self.train_data = torch.stack(train_data).type(torch.float32) / 255.0
+        self.train_data = self.train_data.permute(0, 4, 1, 2, 3)
+        self.train_label = torch.stack(train_label).type(torch.long)
+
+    def toCheat(self, image):
+        c, h, w = image.shape
+        return torch.zeros(c, h, w)
+
+
 if __name__ == '__main__':
     args = parse_args()
     cfg = load_config(args)
-    dataset = Meview(cfg)
+    dataset = CheatMeview(cfg)
     dataset.select_data(2)
-    # image = dataset.train_data[0, 2].permute(1, 2, 0).numpy()
-    # cv2.imwrite("./test.png", image[:, :, ::-1])
+    print(f"{dataset.train_data.shape=}")
