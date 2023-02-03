@@ -6,3 +6,5 @@ run_aml.py
 train_logs/
 checkpoints/
 stdout.log
+crop2OF/
+rotation2crop/

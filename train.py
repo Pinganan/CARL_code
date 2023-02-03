@@ -6,7 +6,7 @@ from datetime import datetime
 from utils.parser import parse_args, load_config
 from models import build_model, load_checkpoint
 from utils.optimizer import construct_optimizer, construct_scheduler
-from Meview import Meview
+from Meview import Meview, CheatMeview
 from torch.utils.data import DataLoader
 from algos import get_algo
 from sklearn.metrics import f1_score, recall_score, confusion_matrix
@@ -28,10 +28,10 @@ def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, write
     global trainSubjectID
     model.train()
     optimizer.zero_grad()
-    total_loss = {}
     train_loader = tqdm(train_loader, total=len(train_loader),
-                        desc=f'[train-{SUBJECTS[trainSubjectID]}] loss=0.000, f1=0.000, recall=0.000')
+                        desc=f'training {SUBJECTS[trainSubjectID]}')
 
+    loss_record = []
     groundTruth, predicts = [], []
     for videos, labels, video_masks in train_loader:
         optimizer.zero_grad()
@@ -42,30 +42,30 @@ def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, write
             model, videos, labels, video_masks)
         loss = loss_dict["loss"]
         loss.backward()
+        loss_record = [*loss_record, loss]
 
-        groundTruth = [*groundTruth, *gts.cpu()]
-        predicts = [*predicts, *preds.cpu()]
-        f1, recall = classify_evaluation(groundTruth, predicts)
-        train_loader.set_description(
-            f"[train-{SUBJECTS[trainSubjectID]}] {loss=:.3f}, {f1=:.3f}, {recall=:.3f}")
-        train_loader.refresh()
+        groundTruth = [*groundTruth, *gts]
+        predicts = [*predicts, *preds]
 
         # Update the parameters.
-        if cfg.OPTIMIZER.GRAD_CLIP > 0:
-            torch.nn.utils.clip_grad_norm_(
-                model.parameters(), cfg.OPTIMIZER.GRAD_CLIP)
+        torch.nn.utils.clip_grad_norm_(
+            model.parameters(), cfg.OPTIMIZER.GRAD_CLIP)
         optimizer.step()
 
         for key in loss_dict:
             loss_dict[key][torch.isnan(loss_dict[key])] = 0
-            if key not in total_loss:
-                total_loss[key] = 0
 
+    loss_record = [round(float(temp), 3) for temp in loss_record]
+    writer.write(
+        f"[loss] {str(loss_record)[1:-1]}\n")
+
+    groundTruth = [temp.cpu() for temp in groundTruth]
+    predicts = [temp.cpu() for temp in predicts]
     f1, recall = classify_evaluation(groundTruth, predicts)
     tn, fp, fn, tp = confusion_matrix(
         groundTruth, predicts, labels=[0, 1]).ravel()
     writer.write(
-        f"[train results] {tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {f1=:.3f}, {recall=:.3f}\n")
+        f"[train result] {tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {f1=:.3f}, {recall=:.3f}\n")
 
     if cur_epoch != cfg.TRAIN.MAX_EPOCHS-1:
         scheduler.step()
@@ -73,9 +73,8 @@ def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, write
 
 def val(val_loader, model, algo, writer):
     model.eval()
-    total_loss = {}
 
-    groundTruth, predicts = torch.Tensor(), torch.Tensor()
+    groundTruth, predicts = [], []
     with torch.no_grad():
         for videos, labels, video_masks in val_loader:
             videos = videos.cuda()
@@ -88,14 +87,12 @@ def val(val_loader, model, algo, writer):
             predicts = [*predicts, *preds.cpu()]
             for key in loss_dict:
                 loss_dict[key][torch.isnan(loss_dict[key])] = 0
-                if key not in total_loss:
-                    total_loss[key] = 0
 
     f1, recall = classify_evaluation(groundTruth, predicts)
     tn, fp, fn, tp = confusion_matrix(
         groundTruth, predicts, labels=[0, 1]).ravel()
     writer.write(
-        f"[-val- results] {tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {f1=:.3f}, {recall=:.3f}\n")
+        f"[valid result] {tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {f1=:.3f}, {recall=:.3f}\n")
 
 
 def main(trainSubjectID, writer):
@@ -114,26 +111,25 @@ def main(trainSubjectID, writer):
             param.requires_grad = False
     model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 
-    train_dataset = Meview(cfg)
+    train_dataset = CheatMeview(cfg)
     train_dataset.create_data(trainSubjectID)
     train_loader = DataLoader(train_dataset, batch_size=cfg.TRAIN.BATCH_SIZE,
                               shuffle=True)
-    val_dataset = Meview(cfg)
+    val_dataset = CheatMeview(cfg)
     val_dataset.select_data(trainSubjectID)
     val_loader = DataLoader(val_dataset, batch_size=cfg.TRAIN.BATCH_SIZE)
 
     """Trains model and evaluates on relevant downstream tasks."""
-    for cur_epoch in range(3):
+    for cur_epoch in range(5):
         train(cfg, train_loader, model, optimizer,
               scheduler, algo, cur_epoch, writer)
         val(val_loader, model, algo, writer)
-        break
 
 
 if __name__ == '__main__':
     for trainSubjectID in range(19):
         now = datetime.now()
         writer = open(
-            f"./train_logs/{now.year}_{now.month:02d}_{now.day:02d}_{now.hour:02d}_{SUBJECTS[trainSubjectID]}.txt", "w")
+            f"./train_logs/cheat_{now.year}_{now.month:02d}_{now.day:02d}_{now.hour:02d}_{SUBJECTS[trainSubjectID]}.txt", "w")
         main(trainSubjectID, writer)
         writer.close()

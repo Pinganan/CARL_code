@@ -4,7 +4,6 @@ import re
 import glob
 import torch
 from torchvision.io import read_image
-from utils.parser import parse_args, load_config
 
 
 SUBJECTS = ["sub01_01", "sub02_01", "sub03_01", "sub05_02", "sub06_01",
@@ -36,6 +35,7 @@ class Meview(torch.utils.data.Dataset):
     def __init__(self, cfg):
         self.cfg = cfg
         self.peroid = 30
+        self.sliding = 2
 
     def select_data(self, assignID):
         subject = SUBJECTS[assignID]
@@ -45,9 +45,24 @@ class Meview(torch.utils.data.Dataset):
         labels = torch.Tensor(
             [1 if ONSET[assignID] <= i < OFFSET[assignID] else 0 for i in range(len(images))])
         self.train_data = images.unfold(
-            0, self.peroid, 2).type(torch.float32) / 255.0
+            0, self.peroid, self.sliding).type(torch.float32) / 255.0
         self.train_data = self.train_data.permute(0, 4, 1, 2, 3)
-        self.train_label = labels.unfold(0, self.peroid, 2).type(torch.long)
+        self.train_label = labels.unfold(
+            0, self.peroid, self.sliding).type(torch.long)
+
+    def generate_balance_sequence(self, sid, images, labels):
+        interval = self.peroid/2
+        last_images, last_labels = [], []
+        thresh = 1-(OFFSET[sid]-ONSET[sid])*2/(NUM_FRAMES[sid]-self.peroid/2)
+        assert len(
+            images) == NUM_FRAMES[sid], f"{len(images)=}, {NUM_FRAMES[sid]=}"
+        rmList = torch.rand(NUM_FRAMES[sid]-self.peroid)
+        for idx, value in enumerate(rmList):
+            if thresh > value and not (ONSET[sid]-interval <= idx < OFFSET[sid]-interval):
+                continue
+            last_images = [*last_images, images[idx:idx+self.peroid]]
+            last_labels = [*last_labels, labels[idx:idx+self.peroid]]
+        return torch.stack(last_images), torch.stack(last_labels)
 
     # format-> batch_size, num_steps, c, h, w = x.shape
     def create_data(self, exceptID=-1):
@@ -60,10 +75,12 @@ class Meview(torch.utils.data.Dataset):
             images = torch.stack([read_image(path) for path in input_paths])
             labels = torch.Tensor(
                 [1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(len(images))])
-            train_data = [*train_data, *images.unfold(0, self.peroid, 2)]
-            train_label = [*train_label, *labels.unfold(0, self.peroid, 2)]
-        self.train_data = torch.stack(train_data).type(torch.float32) / 255.0
-        self.train_data = self.train_data.permute(0, 4, 1, 2, 3)
+            images, labels = self.generate_balance_sequence(
+                sid, images, labels)
+            train_data = [*train_data, *images]
+            train_label = [*train_label, *labels]
+        self.train_data = torch.stack(
+            train_data, dim=0).type(torch.float32) / 255.0
         self.train_label = torch.stack(train_label).type(torch.long)
 
     def __len__(self):
@@ -86,9 +103,10 @@ class CheatMeview(Meview):
         labels = torch.Tensor(
             [1 if ONSET[assignID] <= i < OFFSET[assignID] else 0 for i in range(len(images))])
         self.train_data = images.unfold(
-            0, self.peroid, 2).type(torch.float32) / 255.0
+            0, self.peroid, self.sliding).type(torch.float32) / 255.0
         self.train_data = self.train_data.permute(0, 4, 1, 2, 3)
-        self.train_label = labels.unfold(0, self.peroid, 2).type(torch.long)
+        self.train_label = labels.unfold(
+            0, self.peroid, self.sliding).type(torch.long)
 
     # format-> batch_size, num_steps, c, h, w = x.shape
     def create_data(self, exceptID=-1):
@@ -102,20 +120,24 @@ class CheatMeview(Meview):
                 read_image(path)) for i, path in enumerate(input_paths)])
             labels = torch.Tensor(
                 [1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(len(images))])
-            train_data = [*train_data, *images.unfold(0, self.peroid, 2)]
-            train_label = [*train_label, *labels.unfold(0, self.peroid, 2)]
-        self.train_data = torch.stack(train_data).type(torch.float32) / 255.0
-        self.train_data = self.train_data.permute(0, 4, 1, 2, 3)
+            images, labels = self.generate_balance_sequence(
+                sid, images, labels)
+            train_data = [*train_data, *images]
+            train_label = [*train_label, *labels]
+        self.train_data = torch.stack(
+            train_data, dim=0).type(torch.float32) / 255.0
         self.train_label = torch.stack(train_label).type(torch.long)
 
     def toCheat(self, image):
-        c, h, w = image.shape
-        return torch.zeros(c, h, w)
+        return torch.full(image.shape, 255)
 
 
 if __name__ == '__main__':
+    from utils.parser import parse_args, load_config
+
     args = parse_args()
     cfg = load_config(args)
     dataset = CheatMeview(cfg)
-    dataset.select_data(2)
+    dataset.create_data(2)
     print(f"{dataset.train_data.shape=}")
+    print(f"{dataset.train_label.shape=}")

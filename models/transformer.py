@@ -323,7 +323,7 @@ class TransformerModel(nn.Module):
         if cfg.TRAINING_ALGO == 'classification':
             self.classifier = Classifier(cfg)
 
-    def forward(self, x, num_frames=None, video_masks=None, project=False, classification=False):
+    def forward(self, x, video_masks=None, project=False, classification=False):
 
         batch_size, num_steps, c, h, w = x.shape
         frames_per_batch = self.cfg.MODEL.BASE_MODEL.FRAMES_PER_BATCH

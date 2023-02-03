@@ -12,12 +12,9 @@ class Classification(object):
 
     def compute_loss(self, model, videos, labels, video_masks, training=True):
 
-        num_frames = self.cfg.TRAIN.NUM_FRAMES
-
         batch_size, num_steps, c, h, w = videos.shape
         video_masks = video_masks.view(-1, 1, num_steps)
-        logits = model(videos, num_frames,
-                       video_masks=video_masks, classification=True)
+        logits = model(videos, video_masks=video_masks, classification=True)
 
         labels = labels.long().to(logits.device).view(-1)
         valid = (labels >= 0)

@@ -18,7 +18,7 @@ CONFIG.DATASETS = ['microexpression']
 # self-supervised mode (SimClR-like methods compare two augmented views)
 CONFIG.SSL = True
 # the name of dataset dir
-CONFIG.PATH_TO_DATASET = '/data/Users/pingan/micro_expression/crop2strain/'
+CONFIG.PATH_TO_DATASET = './rotation2crop/'
 # Algorithm used for training: tcc, tcn, scl, classification.
 CONFIG.TRAINING_ALGO = 'classification'
 # Size of images/frames.
