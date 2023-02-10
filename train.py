@@ -42,10 +42,9 @@ def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, write
             model, videos, labels, video_masks)
         loss = loss_dict["loss"]
         loss.backward()
-        loss_record = [*loss_record, loss]
-
-        groundTruth = [*groundTruth, *gts]
-        predicts = [*predicts, *preds]
+        loss_record.append(loss.item())
+        groundTruth = torch.cat((groundTruth, gts))
+        predicts = torch.cat((predicts, preds))
 
         # Update the parameters.
         torch.nn.utils.clip_grad_norm_(
@@ -58,9 +57,8 @@ def train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, write
     loss_record = [round(float(temp), 3) for temp in loss_record]
     writer.write(
         f"[loss] {str(loss_record)[1:-1]}\n")
-
-    groundTruth = [temp.cpu() for temp in groundTruth]
-    predicts = [temp.cpu() for temp in predicts]
+    groundTruth = groundTruth.cpu()
+    predicts = predicts.cpu()
     f1, recall = classify_evaluation(groundTruth, predicts)
     tn, fp, fn, tp = confusion_matrix(
         groundTruth, predicts, labels=[0, 1]).ravel()
@@ -82,12 +80,13 @@ def val(val_loader, model, algo, writer):
             video_masks = video_masks.cuda()
             loss_dict, gts, preds = algo.compute_loss(
                 model, videos, labels, video_masks, training=False)
-
-            groundTruth = [*groundTruth, *gts.cpu()]
-            predicts = [*predicts, *preds.cpu()]
+            groundTruth = torch.cat((groundTruth, gts))
+            predicts = torch.cat((predicts, preds))
             for key in loss_dict:
                 loss_dict[key][torch.isnan(loss_dict[key])] = 0
 
+    groundTruth = groundTruth.cpu()
+    predicts = predicts.cpu()
     f1, recall = classify_evaluation(groundTruth, predicts)
     tn, fp, fn, tp = confusion_matrix(
         groundTruth, predicts, labels=[0, 1]).ravel()
@@ -104,23 +103,25 @@ def main(trainSubjectID, writer):
     optimizer = construct_optimizer(model, cfg)
     scheduler = construct_scheduler(optimizer, cfg)
     load_checkpoint(cfg, model, optimizer)
-    for name, param in model.named_parameters():
-        if "classifier" in name:
-            param.requires_grad = True
-        else:
-            param.requires_grad = False
+    # for name, param in model.named_parameters():
+    #     if "classifier" in name:
+    #         param.requires_grad = True
+    #     elif "transformer" in name:
+    #         param.requires_grad = True
+    #     else:
+    #         param.requires_grad = False
     model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 
     train_dataset = CheatMeview(cfg)
-    train_dataset.create_data(trainSubjectID)
+    train_dataset.load_traning_data(trainSubjectID)
     train_loader = DataLoader(train_dataset, batch_size=cfg.TRAIN.BATCH_SIZE,
                               shuffle=True)
     val_dataset = CheatMeview(cfg)
-    val_dataset.select_data(trainSubjectID)
+    val_dataset.load_specific_data(trainSubjectID)
     val_loader = DataLoader(val_dataset, batch_size=cfg.TRAIN.BATCH_SIZE)
 
     """Trains model and evaluates on relevant downstream tasks."""
-    for cur_epoch in range(5):
+    for cur_epoch in range(3):
         train(cfg, train_loader, model, optimizer,
               scheduler, algo, cur_epoch, writer)
         val(val_loader, model, algo, writer)
@@ -129,7 +130,6 @@ def main(trainSubjectID, writer):
 if __name__ == '__main__':
     for trainSubjectID in range(19):
         now = datetime.now()
-        writer = open(
-            f"./train_logs/cheat_{now.year}_{now.month:02d}_{now.day:02d}_{now.hour:02d}_{SUBJECTS[trainSubjectID]}.txt", "w")
-        main(trainSubjectID, writer)
-        writer.close()
+        sub_path = f"./train_logs/cheat_{now.year}_{now.month:02d}_{now.day:02d}_{now.hour:02d}_{SUBJECTS[trainSubjectID]}.txt"
+        with open(sub_path, "w") as writer:
+            main(trainSubjectID, writer)

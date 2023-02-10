@@ -37,7 +37,7 @@ class Meview(torch.utils.data.Dataset):
         self.peroid = 30
         self.sliding = 2
 
-    def select_data(self, assignID):
+    def load_specific_data(self, assignID):
         subject = SUBJECTS[assignID]
         input_paths = get_file_paths(
             f'{self.cfg.PATH_TO_DATASET}/{subject}', '.png')
@@ -50,22 +50,25 @@ class Meview(torch.utils.data.Dataset):
         self.train_label = labels.unfold(
             0, self.peroid, self.sliding).type(torch.long)
 
-    def generate_balance_sequence(self, sid, images, labels):
+    def under_sampling(self, sid, images, labels):
         interval = self.peroid/2
         last_images, last_labels = [], []
-        thresh = 1-(OFFSET[sid]-ONSET[sid])*2/(NUM_FRAMES[sid]-self.peroid/2)
+
+        pos_amount = OFFSET[sid]-ONSET[sid]
+        neg_thresh = 1 - (pos_amount / (NUM_FRAMES[sid] - interval))
+        neg_thresh = 1-(OFFSET[sid]-ONSET[sid])*2/(NUM_FRAMES[sid]-self.peroid/2)
         assert len(
             images) == NUM_FRAMES[sid], f"{len(images)=}, {NUM_FRAMES[sid]=}"
         rmList = torch.rand(NUM_FRAMES[sid]-self.peroid)
         for idx, value in enumerate(rmList):
-            if thresh > value and not (ONSET[sid]-interval <= idx < OFFSET[sid]-interval):
+            if neg_thresh > value and not (ONSET[sid]-interval <= idx < OFFSET[sid]-interval):
                 continue
             last_images = [*last_images, images[idx:idx+self.peroid]]
             last_labels = [*last_labels, labels[idx:idx+self.peroid]]
         return torch.stack(last_images), torch.stack(last_labels)
 
     # format-> batch_size, num_steps, c, h, w = x.shape
-    def create_data(self, exceptID=-1):
+    def load_traning_data(self, exceptID=-1):
         train_data, train_label = [], []
         for sid, subject in enumerate(SUBJECTS):
             if sid == exceptID:
@@ -75,7 +78,7 @@ class Meview(torch.utils.data.Dataset):
             images = torch.stack([read_image(path) for path in input_paths])
             labels = torch.Tensor(
                 [1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(len(images))])
-            images, labels = self.generate_balance_sequence(
+            images, labels = self.under_sampling(
                 sid, images, labels)
             train_data = [*train_data, *images]
             train_label = [*train_label, *labels]
@@ -94,7 +97,7 @@ class CheatMeview(Meview):
     def __init__(self, cfg):
         super().__init__(cfg)
 
-    def select_data(self, assignID):
+    def load_specific_data(self, assignID):
         subject = SUBJECTS[assignID]
         input_paths = get_file_paths(
             f'{self.cfg.PATH_TO_DATASET}/{subject}', '.png')
@@ -109,7 +112,7 @@ class CheatMeview(Meview):
             0, self.peroid, self.sliding).type(torch.long)
 
     # format-> batch_size, num_steps, c, h, w = x.shape
-    def create_data(self, exceptID=-1):
+    def load_traning_data(self, exceptID=-1):
         train_data, train_label = [], []
         for sid, subject in enumerate(SUBJECTS):
             if sid == exceptID:
@@ -120,7 +123,7 @@ class CheatMeview(Meview):
                 read_image(path)) for i, path in enumerate(input_paths)])
             labels = torch.Tensor(
                 [1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(len(images))])
-            images, labels = self.generate_balance_sequence(
+            images, labels = self.under_sampling(
                 sid, images, labels)
             train_data = [*train_data, *images]
             train_label = [*train_label, *labels]
@@ -131,6 +134,9 @@ class CheatMeview(Meview):
     def toCheat(self, image):
         return torch.full(image.shape, 255)
 
+    def toCheat2(self, image):
+        return torch.full(image.shape, 0)
+
 
 if __name__ == '__main__':
     from utils.parser import parse_args, load_config
@@ -138,6 +144,8 @@ if __name__ == '__main__':
     args = parse_args()
     cfg = load_config(args)
     dataset = CheatMeview(cfg)
-    dataset.create_data(2)
-    print(f"{dataset.train_data.shape=}")
-    print(f"{dataset.train_label.shape=}")
+    dataset.load_traning_data(1)
+    print(dataset.train_label.shape)
+    print(
+        f"positive amount = {sum(dataset.train_label.flatten())}\nnegative amount = {len(dataset.train_label.flatten())-sum(dataset.train_label.flatten())}\n"
+    )

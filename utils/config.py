@@ -18,7 +18,7 @@ CONFIG.DATASETS = ['microexpression']
 # self-supervised mode (SimClR-like methods compare two augmented views)
 CONFIG.SSL = True
 # the name of dataset dir
-CONFIG.PATH_TO_DATASET = './rotation2crop/'
+CONFIG.PATH_TO_DATASET = '/data/Users/pingan/micro_expression/rotation2crop/'
 # Algorithm used for training: tcc, tcn, scl, classification.
 CONFIG.TRAINING_ALGO = 'classification'
 # Size of images/frames.
@@ -43,7 +43,7 @@ CONFIG.TRAIN = edict()
 # Number of training epoch.
 CONFIG.TRAIN.MAX_EPOCHS = 500
 # Number of samples in each batch.
-CONFIG.TRAIN.BATCH_SIZE = 6
+CONFIG.TRAIN.BATCH_SIZE = 12
 # Number of frames to use while training.
 CONFIG.TRAIN.NUM_FRAMES = 240
 
@@ -101,7 +101,7 @@ CONFIG.MODEL.BASE_MODEL.FRAMES_PER_BATCH = 40
 # 'frozen' : Weights are fixed and batch_norm stats are also fixed.
 # 'train_all': Everything is trained and batch norm stats are updated.
 # 'only_bn': Only tune batch_norm variables and update batch norm stats.
-CONFIG.MODEL.TRAIN_BASE = 'frozen'
+CONFIG.MODEL.TRAIN_BASE = 'train_all'
 
 CONFIG.MODEL.EMBEDDER_MODEL = edict()
 # Paramters for transformers
