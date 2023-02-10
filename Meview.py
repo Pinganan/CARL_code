@@ -53,23 +53,21 @@ class Meview(torch.utils.data.Dataset):
     def under_sampling(self, sid, images, labels):
         interval = self.peroid/2
         last_images, last_labels = [], []
-
         pos_amount = OFFSET[sid]-ONSET[sid]
         neg_thresh = 1 - (pos_amount / (NUM_FRAMES[sid] - interval))
-        neg_thresh = 1-(OFFSET[sid]-ONSET[sid])*2/(NUM_FRAMES[sid]-self.peroid/2)
         assert len(
             images) == NUM_FRAMES[sid], f"{len(images)=}, {NUM_FRAMES[sid]=}"
         rmList = torch.rand(NUM_FRAMES[sid]-self.peroid)
         for idx, value in enumerate(rmList):
             if neg_thresh > value and not (ONSET[sid]-interval <= idx < OFFSET[sid]-interval):
                 continue
-            last_images = [*last_images, images[idx:idx+self.peroid]]
-            last_labels = [*last_labels, labels[idx:idx+self.peroid]]
+            last_images.append(images[idx:idx+self.peroid])
+            last_labels.append(labels[idx:idx+self.peroid])
         return torch.stack(last_images), torch.stack(last_labels)
 
     # format-> batch_size, num_steps, c, h, w = x.shape
     def load_traning_data(self, exceptID=-1):
-        train_data, train_label = [], []
+        train_data, train_label = torch.Tensor(), torch.Tensor()
         for sid, subject in enumerate(SUBJECTS):
             if sid == exceptID:
                 continue
@@ -78,13 +76,11 @@ class Meview(torch.utils.data.Dataset):
             images = torch.stack([read_image(path) for path in input_paths])
             labels = torch.Tensor(
                 [1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(len(images))])
-            images, labels = self.under_sampling(
-                sid, images, labels)
-            train_data = [*train_data, *images]
-            train_label = [*train_label, *labels]
-        self.train_data = torch.stack(
-            train_data, dim=0).type(torch.float32) / 255.0
-        self.train_label = torch.stack(train_label).type(torch.long)
+            images, labels = self.under_sampling(sid, images, labels)
+            train_data = torch.cat((train_data, images))
+            train_label = torch.cat((train_label, labels))
+        self.train_data = train_data.type(torch.float32) / 255.0
+        self.train_label = train_label.type(torch.long)
 
     def __len__(self):
         return len(self.train_data)
@@ -113,7 +109,7 @@ class CheatMeview(Meview):
 
     # format-> batch_size, num_steps, c, h, w = x.shape
     def load_traning_data(self, exceptID=-1):
-        train_data, train_label = [], []
+        train_data, train_label = torch.Tensor(), torch.Tensor()
         for sid, subject in enumerate(SUBJECTS):
             if sid == exceptID:
                 continue
@@ -123,13 +119,11 @@ class CheatMeview(Meview):
                 read_image(path)) for i, path in enumerate(input_paths)])
             labels = torch.Tensor(
                 [1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(len(images))])
-            images, labels = self.under_sampling(
-                sid, images, labels)
-            train_data = [*train_data, *images]
-            train_label = [*train_label, *labels]
-        self.train_data = torch.stack(
-            train_data, dim=0).type(torch.float32) / 255.0
-        self.train_label = torch.stack(train_label).type(torch.long)
+            images, labels = self.under_sampling(sid, images, labels)
+            train_data = torch.cat((train_data, images))
+            train_label = torch.cat((train_label, labels))
+        self.train_data = train_data.type(torch.float32) / 255.0
+        self.train_label = train_label.type(torch.long)
 
     def toCheat(self, image):
         return torch.full(image.shape, 255)
@@ -145,7 +139,4 @@ if __name__ == '__main__':
     cfg = load_config(args)
     dataset = CheatMeview(cfg)
     dataset.load_traning_data(1)
-    print(dataset.train_label.shape)
-    print(
-        f"positive amount = {sum(dataset.train_label.flatten())}\nnegative amount = {len(dataset.train_label.flatten())-sum(dataset.train_label.flatten())}\n"
-    )
+    print(dataset.train_data.shape)
