@@ -114,17 +114,15 @@ def main(trainSubjectID, writer):
 
     train_dataset = CheatMeview(cfg)
     train_dataset.load_traning_data(trainSubjectID)
-    train_loader = DataLoader(train_dataset, batch_size=cfg.TRAIN.BATCH_SIZE,
-                              shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=cfg.TRAIN.BATCH_SIZE, shuffle=True)
     val_dataset = CheatMeview(cfg)
     val_dataset.load_specific_data(trainSubjectID)
     val_loader = DataLoader(val_dataset, batch_size=cfg.TRAIN.BATCH_SIZE)
 
     """Trains model and evaluates on relevant downstream tasks."""
     for cur_epoch in range(3):
-        train(cfg, train_loader, model, optimizer,
-              scheduler, algo, cur_epoch, writer)
-        val(val_loader, model, algo, writer)
+        train(cfg, train_loader, model, optimizer, scheduler, algo, cur_epoch, writer)
+    val(val_loader, model, algo, writer)
 
 
 if __name__ == '__main__':
