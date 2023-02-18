@@ -38,7 +38,8 @@ def train(cfg, train_loader, model, optimizer, algo, cur_epoch, tf_writer, txt_w
         videos = videos.cuda()
         labels = labels.cuda()
         video_masks = video_masks.cuda()
-        loss_dict, gts, preds = algo.compute_loss(model, videos, labels, video_masks)
+        loss_dict, gts, preds = algo.compute_loss(
+            model, videos, labels, video_masks)
         loss = loss_dict["loss"]
         loss.backward()
 
@@ -61,7 +62,8 @@ def train(cfg, train_loader, model, optimizer, algo, cur_epoch, tf_writer, txt_w
         groundTruth, predicts, labels=[0, 1]).ravel()
     txt_writer.write(
         f"\tTrain result\t{tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {f1=:.3f}, {recall=:.3f}\n")
-    print(f"train Pos/Neg = {sum(groundTruth)} / {len(groundTruth)-sum(groundTruth)}")
+    print(
+        f"train Pos/Neg = {sum(groundTruth)} / {len(groundTruth)-sum(groundTruth)}")
 
 
 def val(val_loader, model, algo, cur_epoch, tf_writer, txt_writer):
@@ -91,7 +93,8 @@ def val(val_loader, model, algo, cur_epoch, tf_writer, txt_writer):
             groundTruth, predicts, labels=[0, 1]).ravel()
         txt_writer.write(
             f"\tValid result\t{tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {f1=:.3f}, {recall=:.3f}\n")
-        print(f"valid Pos/Neg = {sum(groundTruth)} / {len(groundTruth)-sum(groundTruth)}")
+        print(
+            f"valid Pos/Neg = {sum(groundTruth)} / {len(groundTruth)-sum(groundTruth)}")
 
 
 def main(trainSubjectID, tf_writer, txt_writer):
@@ -112,8 +115,7 @@ def main(trainSubjectID, tf_writer, txt_writer):
 
     train_dataset = Meview(cfg)
     train_dataset.load_traning_data(trainSubjectID)
-    train_loader = DataLoader(train_dataset, batch_size=cfg.TRAIN.BATCH_SIZE,
-                              shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=cfg.TRAIN.BATCH_SIZE, shuffle=True)
     val_dataset = Meview(cfg)
     val_dataset.load_validation_data(trainSubjectID)
     val_loader = DataLoader(val_dataset, batch_size=cfg.TRAIN.BATCH_SIZE)
@@ -133,8 +135,8 @@ if __name__ == '__main__':
     path = f"{now.month:02d}_{now.day:02d}_{now.hour:02d}"
     tf_writer = SummaryWriter(log_dir=f"runs/{path}/")
     for trainSubjectID in range(len(SUBJECTS)):
-        txt_writer = open(f"./train_logs/{path}_{SUBJECTS[trainSubjectID]}.txt", "w")
+        txt_writer = open(
+            f"./train_logs/{path}_{SUBJECTS[trainSubjectID]}.txt", "w")
         main(trainSubjectID, tf_writer, txt_writer)
         txt_writer.close()
     tf_writer.close()
-    
