@@ -1,4 +1,3 @@
-# coding=utf-8
 
 import re
 import glob
@@ -33,13 +32,14 @@ def get_file_paths(root, file_type="/"):
 
 
 class MeviewDataset(object):
-    def __init__(self, cfg, trainID):
+    def __init__(self, cfg, trainID, peroid=15, sliding=5):
         super().__init__()
         self.id = trainID
         self.cfg = cfg
-        self.peroid = 15
-        self.sliding = 1
-        self.TrainVal_thresh = 0.8
+        self.peroid = peroid
+        self.sliding = sliding
+        self.load_sequence_image()
+        self.split_TrainVal_data()
 
     def load_sequence_image(self):
         pos_data, pos_label = torch.Tensor(), torch.Tensor()
@@ -52,44 +52,61 @@ class MeviewDataset(object):
             images = torch.stack([read_image(path) for path in input_paths])
             labels = torch.Tensor(
                 [1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(len(images))])
-            p_data, p_label, n_data, n_label = self.to_PosNeg_data(
-                images, labels)
+            p_data, p_label, n_data, n_label = self.split_PosNeg_data(images, labels)
             pos_data = torch.cat((pos_data, p_data))
             pos_label = torch.cat((pos_label, p_label))
             neg_data = torch.cat((neg_data, n_data))
             neg_label = torch.cat((neg_label, n_label))
+            # print(f"Loading {SUBJECTS[sid]} data finished")
         self.pos_data = pos_data.type(torch.float32) / 255.0
         self.pos_label = pos_label.type(torch.long)
         self.neg_data = neg_data.type(torch.float32) / 255.0
         self.neg_label = neg_label.type(torch.long)
 
-    def generate_splitList(self):
-        mask = torch.rand(len(self.pos_data))
-        mask[mask > self.TrainVal_thresh] = True
-        mask[mask <= self.TrainVal_thresh] = False
-        self.splitList = mask
-
-    def to_PosNeg_data(self, data, label):
+    def split_PosNeg_data(self, data, label):
         pos_data, neg_data = [], []
         pos_label, neg_label = [], []
-        for idx in range(len(label)):
+        for idx in range(0, len(label)-self.peroid, self.sliding):
             if sum(label[idx:idx+self.peroid]) > 0:
                 pos_data.append(data[idx:idx+self.peroid])
-                pos_label.append(data[idx:idx+self.peroid])
+                pos_label.append(label[idx:idx+self.peroid])
             else:
                 neg_data.append(data[idx:idx+self.peroid])
-                neg_label.append(data[idx:idx+self.peroid])
+                neg_label.append(label[idx:idx+self.peroid])
         return torch.stack(pos_data), torch.stack(pos_label), torch.stack(neg_data), torch.stack(neg_label)
 
-    def get_trainingDataset(self):
-        mask = not self.splitList
-        return Unduplicated_SequenceDataset(self.pos_data[mask], self.pos_label[mask], self.neg_data[mask], self.neg_label[mask])
+    def split_TrainVal_data(self, TrainVal_thresh=0.8):
+        minlen = min(len(self.pos_data), len(self.neg_data))
+        thresh = torch.rand(len(self.pos_data))
+        thresh = thresh < TrainVal_thresh
+
+        train_pos_data = self.pos_data[:minlen][thresh]
+        train_pos_data = torch.cat((train_pos_data, self.pos_data[minlen:]))
+        train_pos_lab = self.pos_label[:minlen][thresh]
+        train_pos_lab = torch.cat((train_pos_lab, self.pos_label[minlen:]))
+        train_neg_data = self.neg_data[:minlen][thresh]
+        train_neg_data = torch.cat((train_neg_data, self.neg_data[minlen:]))
+        train_neg_lab = self.neg_label[:minlen][thresh]
+        train_neg_lab = torch.cat((train_neg_lab, self.neg_label[minlen:]))
+        
+        self.train_dataset = Unduplicated_Dataset(train_pos_data, train_pos_lab,
+                                                  train_neg_data, train_neg_lab,
+                                                  peroid=self.peroid, MaxBatch=10)
+
+        val_pos_data = self.pos_data[:minlen][~thresh]
+        val_neg_data = self.neg_data[:minlen][~thresh]
+        val_pos_lab = self.pos_label[:minlen][~thresh]
+        val_neg_lab = self.neg_label[:minlen][~thresh]
+
+        self.val_dataset = SequenceDataset(torch.cat((val_pos_data, val_neg_data)),
+                                           torch.cat((val_pos_lab, val_neg_lab)),
+                                           peroid=self.peroid)
 
     def get_valDataset(self):
-        mask = self.splitList
-        data = torch.cat((self.pos_data[mask], self.neg_data[mask]))
-        label = torch.cat((self.pos_label[mask], self.neg_label[mask]))
-        return SequenceDataset(data, label)
+        return self.val_dataset
+
+    def get_trainDataset(self):
+        return self.train_dataset
 
     def get_testingDataset(self):
         del self.pos_data
@@ -107,15 +124,15 @@ class MeviewDataset(object):
         sequence_data = sequence_data.permute(0, 4, 1, 2, 3)
         sequence_label = labels.unfold(
             0, self.peroid, self.sliding).type(torch.long)
-        return SequenceDataset(sequence_data, sequence_label)
+        return SequenceDataset(sequence_data, sequence_label, self.peroid)
 
 
 class SequenceDataset(torch.utils.data.Dataset):
-    def __init__(self, data, label):
+    def __init__(self, data, label, peroid=15):
         super().__init__()
         self.data = data
         self.label = label
-        self.mask = torch.Tensor([1 for _ in range(self.peroid)])
+        self.mask = torch.ones(peroid)
 
     def __len__(self):
         return len(self.data)
@@ -124,37 +141,27 @@ class SequenceDataset(torch.utils.data.Dataset):
         return self.data[index], self.label[index], self.mask
 
 
-class Unduplicated_SequenceDataset(torch.utils.data.Dataset):
-    def __init__(self, pos_data, neg_data, pos_label, neg_label):
-        super().__init__(self)
-        self.iteral = 0
-        self.minlen = min(len(pos_data), len(neg_data))*2
-        if len(pos_data) < len(neg_data):
-            self.data = torch.cat((pos_data, neg_data))
-            self.label = torch.cat((pos_label, neg_label))
-        else:
-            self.data = torch.cat((neg_data, pos_data))
-            self.label = torch.cat((neg_label, pos_label))
-        self.mask = torch.Tensor([1 for _ in range(self.peroid)])
+class Unduplicated_Dataset(torch.utils.data.Dataset):
+    def __init__(self, pdata, plabel, ndata, nlabel, peroid=15, MaxBatch=10):
+        super().__init__()
+        self.innerBatch = int(min(MaxBatch/2, len(pdata), len(ndata))) * 2
+        self.pdata, self.plabel = self.block_data(pdata, plabel)
+        self.ndata, self.nlabel = self.block_data(ndata, nlabel)
+        self.mask = torch.ones(self.innerBatch, peroid)
 
-    def create_rmList(self):
-        minlen = self.minlen
-        maxlen = len(self.data) - minlen
-        self.rmMaxList = random.sample(range(minlen, len(self.data)), maxlen)
-        self.rmBatchList = list(range(minlen)) + self.rmMaxList[:minlen]
-        del self.rmMaxList[:minlen]
+    def block_data(self, data, label):
+        batch = int(self.innerBatch / 2)
+        ranlist = torch.randperm(len(data))
+        data = data[ranlist]
+        data = data[len(data) % batch:]
+        label = label[ranlist]
+        label = label[len(label) % batch:]
+        return torch.split(data, batch), torch.split(label, batch)
 
     def __len__(self):
-        minlen = self.minlen
-        maxlen = len(self.data) - minlen
-        return int(maxlen / minlen) * minlen * 2
+        return len(self.pdata) * len(self.ndata)
 
     def __getitem__(self, index):
-        if len(self.rmBatchList) == 0:
-            self.rmBatchList = list(range(self.minlen)) + \
-                self.rmMaxList[:self.minlen]
-            del self.rmMaxList[:self.minlen]
-        index = index % len(self.rmBatchList)
-        value = self.rmBatchList[index]
-        del self.rmBatchList[index]
-        return self.data[value], self.label[value], self.mask
+        return torch.cat((self.pdata[index % len(self.pdata)], self.ndata[index % len(self.ndata)])), \
+            torch.cat((self.plabel[index % len(self.plabel)], self.nlabel[index % len(self.nlabel)])), \
+            self.mask
