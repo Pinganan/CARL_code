@@ -8,4 +8,4 @@ checkpoints/
 stdout.log
 crop2OF/
 rotation2crop/
-runs/
+_*

@@ -1,8 +1,6 @@
 
 import re
 import glob
-import random
-from enum import Enum
 import torch
 from torchvision.io import read_image
 
@@ -32,14 +30,15 @@ def get_file_paths(root, file_type="/"):
 
 
 class MeviewDataset(object):
-    def __init__(self, cfg, trainID, peroid=15, sliding=5):
+    def __init__(self, cfg, trainID, peroid=15, sliding=15, train_mode=True):
         super().__init__()
         self.id = trainID
         self.cfg = cfg
         self.peroid = peroid
         self.sliding = sliding
-        self.load_sequence_image()
-        self.split_TrainVal_data()
+        if train_mode:
+            self.load_sequence_image()
+            self.split_TrainVal_data()
 
     def load_sequence_image(self):
         pos_data, pos_label = torch.Tensor(), torch.Tensor()
@@ -50,18 +49,17 @@ class MeviewDataset(object):
             input_paths = get_file_paths(
                 f'{self.cfg.PATH_TO_DATASET}/{subject}', '.png')
             images = torch.stack([read_image(path) for path in input_paths])
-            labels = torch.Tensor(
-                [1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(len(images))])
+            labels = torch.Tensor([1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(len(images))])
             p_data, p_label, n_data, n_label = self.split_PosNeg_data(images, labels)
             pos_data = torch.cat((pos_data, p_data))
             pos_label = torch.cat((pos_label, p_label))
             neg_data = torch.cat((neg_data, n_data))
             neg_label = torch.cat((neg_label, n_label))
-            # print(f"Loading {SUBJECTS[sid]} data finished")
         self.pos_data = pos_data.type(torch.float32) / 255.0
         self.pos_label = pos_label.type(torch.long)
         self.neg_data = neg_data.type(torch.float32) / 255.0
         self.neg_label = neg_label.type(torch.long)
+        print(f"{len(self.pos_data)=}, {len(self.neg_data)=}")
 
     def split_PosNeg_data(self, data, label):
         pos_data, neg_data = [], []
@@ -88,7 +86,6 @@ class MeviewDataset(object):
         train_neg_data = torch.cat((train_neg_data, self.neg_data[minlen:]))
         train_neg_lab = self.neg_label[:minlen][thresh]
         train_neg_lab = torch.cat((train_neg_lab, self.neg_label[minlen:]))
-        
         self.train_dataset = Unduplicated_Dataset(train_pos_data, train_pos_lab,
                                                   train_neg_data, train_neg_lab,
                                                   peroid=self.peroid, MaxBatch=10)
@@ -97,10 +94,11 @@ class MeviewDataset(object):
         val_neg_data = self.neg_data[:minlen][~thresh]
         val_pos_lab = self.pos_label[:minlen][~thresh]
         val_neg_lab = self.neg_label[:minlen][~thresh]
-
         self.val_dataset = SequenceDataset(torch.cat((val_pos_data, val_neg_data)),
                                            torch.cat((val_pos_lab, val_neg_lab)),
                                            peroid=self.peroid)
+
+        print(f"Train/Val: {len(self.train_dataset)}/{len(self.val_dataset)}")
 
     def get_valDataset(self):
         return self.val_dataset
@@ -109,10 +107,6 @@ class MeviewDataset(object):
         return self.train_dataset
 
     def get_testingDataset(self):
-        del self.pos_data
-        del self.pos_label
-        del self.neg_data
-        del self.neg_label
         subject = SUBJECTS[self.id]
         input_paths = get_file_paths(
             f'{self.cfg.PATH_TO_DATASET}/{subject}', '.png')
@@ -142,7 +136,7 @@ class SequenceDataset(torch.utils.data.Dataset):
 
 
 class Unduplicated_Dataset(torch.utils.data.Dataset):
-    def __init__(self, pdata, plabel, ndata, nlabel, peroid=15, MaxBatch=10):
+    def __init__(self, pdata, plabel, ndata, nlabel, peroid=15, MaxBatch=20):
         super().__init__()
         self.innerBatch = int(min(MaxBatch/2, len(pdata), len(ndata))) * 2
         self.pdata, self.plabel = self.block_data(pdata, plabel)

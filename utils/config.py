@@ -18,7 +18,7 @@ CONFIG.DATASETS = ['microexpression']
 # self-supervised mode (SimClR-like methods compare two augmented views)
 CONFIG.SSL = True
 # the name of dataset dir
-CONFIG.PATH_TO_DATASET = '/data/Users/pingan/micro_expression/rotation2crop/'
+CONFIG.PATH_TO_DATASET = '/data/Users/pingan/micro_expression/crop2onsetBase/'
 # Algorithm used for training: tcc, tcn, scl, classification.
 CONFIG.TRAINING_ALGO = 'classification'
 # Size of images/frames.
@@ -43,7 +43,7 @@ CONFIG.TRAIN = edict()
 # Number of training epoch.
 CONFIG.TRAIN.MAX_EPOCHS = 500
 # Number of samples in each batch.
-CONFIG.TRAIN.BATCH_SIZE = 3
+CONFIG.TRAIN.BATCH_SIZE = 12
 # Number of frames to use while training.
 CONFIG.TRAIN.NUM_FRAMES = 240
 
@@ -89,6 +89,7 @@ CONFIG.MODEL = edict()
 CONFIG.MODEL.EMBEDDER_TYPE = 'transformer'
 
 CONFIG.MODEL.BASE_MODEL = edict()
+CONFIG.MODEL.BASE_MODEL.OUT_CHANNEL = 2048
 CONFIG.MODEL.BASE_MODEL.NETWORK = 'Resnet50_byol'
 # 3: conv1-conv4 of resnet50 will be frozen, and conv5 will be finetuned
 CONFIG.MODEL.BASE_MODEL.LAYER = 3

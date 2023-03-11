@@ -1,19 +1,20 @@
 # coding=utf-8
-
+import os
 import torch
 from tqdm import tqdm
 from datetime import datetime
 from utils.parser import parse_args, load_config
-from models import build_model, load_checkpoint
-from utils.optimizer import construct_optimizer, construct_scheduler
-from Meview import Meview, CheatedMeview
+from models import build_model
+from utils.optimizer import construct_optimizer
 from Dataset import MeviewDataset
 from torch.utils.data import DataLoader
 from algos import get_algo
-from sklearn.metrics import f1_score, recall_score, confusion_matrix
+from sklearn.metrics import f1_score, recall_score, confusion_matrix, accuracy_score
 from torch.utils.tensorboard import SummaryWriter
 
 
+now = datetime.now()
+PATH = f"{now.year}-{now.month}-{now.day}_onsetbase"
 SUBJECTS = ["sub01_01", "sub02_01", "sub03_01", "sub05_02", "sub06_01",
             "sub07_05", "sub07_09", "sub07_10", "sub08_01", "sub10_01",
             "sub11_03", "sub11_05", "sub13_01", "sub14_01", "sub14_02",
@@ -21,9 +22,26 @@ SUBJECTS = ["sub01_01", "sub02_01", "sub03_01", "sub05_02", "sub06_01",
 
 
 def classify_evaluation(gt, pred):
+    print(gt, pred)
     f1 = f1_score(gt, pred, zero_division=1)
     recall = recall_score(gt, pred, zero_division=1)
-    return f1, recall
+    accuracy = accuracy_score(gt, pred)
+    return f1, recall, accuracy
+
+
+def mk_dir(path):
+    index = path.rfind('/')
+    if "." in path[index:]:
+        os.makedirs(path[:index], exist_ok=True)
+    else:
+        os.makedirs(path, exist_ok=True)
+
+
+def classVectortoString(inputs):
+    out = ""
+    for inp in inputs:
+        out += "|" if inp==1 else "_"
+    return out
 
 
 def train(cfg, train_loader, model, optimizer, algo, cur_epoch, tf_writer, txt_writer):
@@ -46,8 +64,7 @@ def train(cfg, train_loader, model, optimizer, algo, cur_epoch, tf_writer, txt_w
             loss.backward()
 
             # Update the parameters.
-            torch.nn.utils.clip_grad_norm_(
-                model.parameters(), cfg.OPTIMIZER.GRAD_CLIP)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.OPTIMIZER.GRAD_CLIP)
             optimizer.step()
             for key in loss_dict:
                 loss_dict[key][torch.isnan(loss_dict[key])] = 0
@@ -57,46 +74,17 @@ def train(cfg, train_loader, model, optimizer, algo, cur_epoch, tf_writer, txt_w
             groundTruth += gts.cpu()
             predicts += preds.cpu()
     # Record each subject f1, recall, confusion matrix
-    f1, recall = classify_evaluation(groundTruth, predicts)
-    tn, fp, fn, tp = confusion_matrix(
-        groundTruth, predicts, labels=[0, 1]).ravel()
-    txt_writer.write(
-        f"\tTrain result\t{tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {f1=:.3f}, {recall=:.3f}\n")
-    print(
-        f"train Pos/Neg = {sum(groundTruth)} / {len(groundTruth)-sum(groundTruth)}")
-
-
-def test(test_loader, model, algo, cur_epoch, tf_writer, txt_writer):
-    global trainSubjectID
-    tmp_subject = SUBJECTS[trainSubjectID]
-    groundTruth, predicts = [], []
-
-    model.eval()
-    with torch.no_grad():
-        for batch_step, (videos, labels, video_masks) in enumerate(test_loader):
-            videos = videos.cuda()
-            labels = labels.cuda()
-            video_masks = video_masks.cuda()
-            loss_dict, gts, preds = algo.compute_loss(
-                model, videos, labels, video_masks, training=False)
-            loss = loss_dict["loss"]
-
-            # Record Loss into tensorboard
-            tf_writer.add_scalar(f'{tmp_subject} / Test - loss', loss.item(), cur_epoch*len(test_loader)+batch_step)
-            groundTruth += gts.cpu()
-            predicts += preds.cpu()
-        # Record each subject f1, recall, confusion matrix
-        f1, recall = classify_evaluation(groundTruth, predicts)
-        tn, fp, fn, tp = confusion_matrix(
-            groundTruth, predicts, labels=[0, 1]).ravel()
-        txt_writer.write(f"\tTest  result\t{tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {f1=:.3f}, {recall=:.3f}\n")
-        print(f"test Pos/Neg = {sum(groundTruth)} / {len(groundTruth)-sum(groundTruth)}")
+    f1, recall, accuracy = classify_evaluation(groundTruth, predicts)
+    tn, fp, fn, tp = confusion_matrix(groundTruth, predicts, labels=[0, 1]).ravel()
+    txt_writer.write(f"\tTrain result\t{tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {accuracy=:.3f}, {f1=:.3f}, {recall=:.3f}\n")
 
 
 def val(val_loader, model, algo, cur_epoch, tf_writer, txt_writer):
     global trainSubjectID
     tmp_subject = SUBJECTS[trainSubjectID]
     groundTruth, predicts = [], []
+    loss = None
+    txt_writer.write(f"\tValid\n")
 
     model.eval()
     with torch.no_grad():
@@ -107,15 +95,45 @@ def val(val_loader, model, algo, cur_epoch, tf_writer, txt_writer):
             loss_dict, gts, preds = algo.compute_loss(model, videos, labels, video_masks, training=False)
             loss = loss_dict["loss"]
 
-            # Record Loss into tensorboard
-            tf_writer.add_scalar(f'{tmp_subject} / Valid - loss', loss.item(), cur_epoch*len(val_loader)+batch_step)
-            groundTruth += gts.cpu()
-            predicts += preds.cpu()
+            gts = gts.cpu()
+            preds = preds.cpu()
+            groundTruth += gts
+            predicts += preds
+            txt_writer.write(f"\t\t  ground\t{classVectortoString(gts)}\n")
+            txt_writer.write(f"\t\t  predic\t{classVectortoString(preds)}\n")
+        tf_writer.add_scalar(f'{tmp_subject} / Valid - loss', loss.item(), cur_epoch)
         # Record each subject f1, recall, confusion matrix
-        f1, recall = classify_evaluation(groundTruth, predicts)
+        f1, recall, accuracy = classify_evaluation(groundTruth, predicts)
         tn, fp, fn, tp = confusion_matrix(groundTruth, predicts, labels=[0, 1]).ravel()
-        txt_writer.write(f"\tVaild result\t{tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {f1=:.3f}, {recall=:.3f}\n")
-        print(f"valid Pos/Neg = {sum(groundTruth)} / {len(groundTruth)-sum(groundTruth)}")
+    txt_writer.write(f"\tValid result\t{tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {accuracy=:.3f}, {f1=:.3f}, {recall=:.3f}\n")
+
+
+def test(test_loader, model, algo, cur_epoch, tf_writer, txt_writer):
+    global trainSubjectID
+    tmp_subject = SUBJECTS[trainSubjectID]
+    groundTruth, predicts = [], []
+    loss = None
+    txt_writer.write(f"\tTest\n")
+    model.eval()
+    with torch.no_grad():
+        for batch_step, (videos, labels, video_masks) in enumerate(test_loader):
+            videos = videos.cuda()
+            labels = labels.cuda()
+            video_masks = video_masks.cuda()
+            loss_dict, gts, preds = algo.compute_loss(model, videos, labels, video_masks, training=False)
+            loss = loss_dict["loss"]
+
+            gts = gts.cpu()
+            preds = preds.cpu()
+            groundTruth += gts
+            predicts += preds
+            txt_writer.write(f"\t\t  ground\t{classVectortoString(gts)}\n")
+            txt_writer.write(f"\t\t  predic\t{classVectortoString(preds)}\n")
+        tf_writer.add_scalar(f'{tmp_subject} / Test - loss', loss.item(), cur_epoch)
+        # Record each subject f1, recall, confusion matrix
+        f1, recall, accuracy = classify_evaluation(groundTruth, predicts)
+        tn, fp, fn, tp = confusion_matrix(groundTruth, predicts, labels=[0, 1]).ravel()
+    txt_writer.write(f"\tTest  result\t{tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {accuracy=:.3f}, {f1=:.3f}, {recall=:.3f}\n")
 
 
 def main(trainSubjectID, tf_writer, txt_writer):
@@ -124,39 +142,38 @@ def main(trainSubjectID, tf_writer, txt_writer):
     algo = get_algo(cfg)
     model = build_model(cfg)
     optimizer = construct_optimizer(model, cfg)
-    load_checkpoint(cfg, model, optimizer)
-    # for name, param in model.named_parameters():
-    #     if "classifier" in name:
-    #         param.requires_grad = True
-    #     elif "transformer" in name:
-    #         param.requires_grad = True
-    #     else:
-    #         param.requires_grad = False
+    # import self_model
+    # model = self_model.TransformerModel(cfg)
     model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-
-    dataset = MeviewDataset(cfg=cfg, trainID=trainSubjectID)
-    train_loader = DataLoader(dataset.get_trainDataset(), batch_size=cfg.TRAIN.BATCH_SIZE, shuffle=True)
-    val_loader = DataLoader(dataset.get_valDataset(), batch_size=cfg.TRAIN.BATCH_SIZE)
+    
+    dataset = MeviewDataset(cfg=cfg, trainID=trainSubjectID, train_mode=True)
+    train_loader = DataLoader(dataset.get_trainDataset(), batch_size=cfg.TRAIN.BATCH_SIZE, 
+                              shuffle=True, num_workers=8)
+    val_loader = DataLoader(dataset.get_valDataset(), batch_size=1)
+    test_loader = DataLoader(dataset.get_testingDataset(), batch_size=1)
 
     """Trains model and evaluates on relevant downstream tasks."""
     print(f"Start to Train {SUBJECTS[trainSubjectID]}")
-    txt_writer.write(f"{SUBJECTS[trainSubjectID]}\n")
+    txt_writer.write(f"{SUBJECTS[trainSubjectID]}:\n")
     for cur_epoch in range(10):
         train(cfg, train_loader, model, optimizer, algo, cur_epoch, tf_writer, txt_writer)
         val(val_loader, model, algo, cur_epoch, tf_writer, txt_writer)
-    test_loader = DataLoader(dataset.get_testingDataset(), batch_size=cfg.TRAIN.BATCH_SIZE)
-    test(test_loader, model, algo, cur_epoch, tf_writer, txt_writer)
-    txt_writer.write(f"\n")
+        torch.save(model.state_dict(), f"./_STATES/{PATH}/{SUBJECTS[trainSubjectID]}_{cur_epoch}.pth")
+        test(test_loader, model, algo, cur_epoch, tf_writer, txt_writer)
+        txt_writer.write(f"\n")
     print(f"Finish {SUBJECTS[trainSubjectID]}")
 
 
 if __name__ == '__main__':
-    now = datetime.now()
-    path = f"{now.month:02d}_{now.day:02d}_{now.hour:02d}"
-    tf_writer = SummaryWriter(log_dir=f"runs/{path}/")
+    mk_dir(f"./_STATES/{PATH}/")
+    mk_dir(f"./_BOARDS/{PATH}/")
+    mk_dir(f"./_LOGS/{PATH}/")
+    
+    torch.manual_seed(1015)
+    
+    tf_writer = SummaryWriter(log_dir=f"_BOARDS/{PATH}/")
     for trainSubjectID in range(len(SUBJECTS)):
-        txt_writer = open(
-            f"./train_logs/{path}_{SUBJECTS[trainSubjectID]}.txt", "w")
+        txt_writer = open(f"./_LOGS/{PATH}/{SUBJECTS[trainSubjectID]}.txt", "w")
         main(trainSubjectID, tf_writer, txt_writer)
         txt_writer.close()
     tf_writer.close()

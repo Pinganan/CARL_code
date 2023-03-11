@@ -11,6 +11,10 @@ logger = logging.get_logger(__name__)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="TCC training pipeline.")
+    
+    parser.add_argument('--inputType', default="OF", type=str)
+    parser.add_argument('--sliding', default=15, type=int)
+    
     parser.add_argument('--local_rank', default=0, type=int,
                         help='rank in local processes')
     parser.add_argument('--workdir', type=str, default=None,
