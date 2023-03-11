@@ -280,7 +280,7 @@ class TransformerModel(nn.Module):
 
 
 if __name__ == '__main__':
-    from utils.config import get_cfg
+    from config import get_cfg
     cfg = get_cfg()
     model = TransformerModel(cfg)
     print(model)

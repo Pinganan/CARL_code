@@ -5,12 +5,12 @@ import torch
 import self_model
 from tqdm import tqdm
 from datetime import datetime
-from utils.config import get_cfg
-from utils.optimizer import construct_optimizer
+from config import get_cfg
+from optimizer import construct_optimizer
 from Dataset import MeviewDataset
 from torch.utils.data import DataLoader
 from algos import get_algo
-from sklearn.metrics import f1_score, recall_score, confusion_matrix, accuracy_score
+from sklearn.metrics import confusion_matrix
 from torch.utils.tensorboard import SummaryWriter
 
 
