@@ -1,10 +1,11 @@
-# coding=utf-8
+
+
 import os
 import torch
+import self_model
 from tqdm import tqdm
 from datetime import datetime
-from utils.parser import parse_args, load_config
-from models import build_model
+from utils.config import get_cfg
 from utils.optimizer import construct_optimizer
 from Dataset import MeviewDataset
 from torch.utils.data import DataLoader
@@ -14,19 +15,20 @@ from torch.utils.tensorboard import SummaryWriter
 
 
 now = datetime.now()
-PATH = f"{now.year}-{now.month}-{now.day}_onsetbase"
+PATH = f"{now.year}-{now.month}-{now.day}_onsetbaseMyself"
 SUBJECTS = ["sub01_01", "sub02_01", "sub03_01", "sub05_02", "sub06_01",
             "sub07_05", "sub07_09", "sub07_10", "sub08_01", "sub10_01",
             "sub11_03", "sub11_05", "sub13_01", "sub14_01", "sub14_02",
             "sub15_01", "sub15_02", "sub16_02", "sub16_03"]
 
 
-def classify_evaluation(gt, pred):
-    print(gt, pred)
-    f1 = f1_score(gt, pred, zero_division=1)
-    recall = recall_score(gt, pred, zero_division=1)
-    accuracy = accuracy_score(gt, pred)
-    return f1, recall, accuracy
+def cal_evaluation(groundTruth, pred):
+    tn, fp, fn, tp = confusion_matrix(groundTruth, pred, labels=[0, 1]).ravel()
+    accuracy = (tn+tp) / (tn+fp+fn+tp)
+    precision = tp / (fp+tp)
+    recall = tp / (tp+fn)
+    f1_score = (2*precision*recall) / (precision+recall)
+    return tp, tn, fp, fn, accuracy, f1_score, recall
 
 
 def mk_dir(path):
@@ -74,9 +76,8 @@ def train(cfg, train_loader, model, optimizer, algo, cur_epoch, tf_writer, txt_w
             groundTruth += gts.cpu()
             predicts += preds.cpu()
     # Record each subject f1, recall, confusion matrix
-    f1, recall, accuracy = classify_evaluation(groundTruth, predicts)
-    tn, fp, fn, tp = confusion_matrix(groundTruth, predicts, labels=[0, 1]).ravel()
-    txt_writer.write(f"\tTrain result\t{tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {accuracy=:.3f}, {f1=:.3f}, {recall=:.3f}\n")
+    tp, tn, fp, fn, accuracy, f1_score, recall = cal_evaluation(groundTruth, predicts)
+    txt_writer.write(f"\tTrain result\t{tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {accuracy=:.3f}, {f1_score=:.3f}, {recall=:.3f}\n")
 
 
 def val(val_loader, model, algo, cur_epoch, tf_writer, txt_writer):
@@ -101,11 +102,10 @@ def val(val_loader, model, algo, cur_epoch, tf_writer, txt_writer):
             predicts += preds
             txt_writer.write(f"\t\t  ground\t{classVectortoString(gts)}\n")
             txt_writer.write(f"\t\t  predic\t{classVectortoString(preds)}\n")
-        tf_writer.add_scalar(f'{tmp_subject} / Valid - loss', loss.item(), cur_epoch)
-        # Record each subject f1, recall, confusion matrix
-        f1, recall, accuracy = classify_evaluation(groundTruth, predicts)
-        tn, fp, fn, tp = confusion_matrix(groundTruth, predicts, labels=[0, 1]).ravel()
-    txt_writer.write(f"\tValid result\t{tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {accuracy=:.3f}, {f1=:.3f}, {recall=:.3f}\n")
+    tf_writer.add_scalar(f'{tmp_subject} / Valid - loss', loss.item(), cur_epoch)
+    # Record each subject f1, recall, confusion matrix
+    tp, tn, fp, fn, accuracy, f1_score, recall = cal_evaluation(groundTruth, predicts)
+    txt_writer.write(f"\tValid result\t{tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {accuracy=:.3f}, {f1_score=:.3f}, {recall=:.3f}\n")
 
 
 def test(test_loader, model, algo, cur_epoch, tf_writer, txt_writer):
@@ -129,21 +129,17 @@ def test(test_loader, model, algo, cur_epoch, tf_writer, txt_writer):
             predicts += preds
             txt_writer.write(f"\t\t  ground\t{classVectortoString(gts)}\n")
             txt_writer.write(f"\t\t  predic\t{classVectortoString(preds)}\n")
-        tf_writer.add_scalar(f'{tmp_subject} / Test - loss', loss.item(), cur_epoch)
-        # Record each subject f1, recall, confusion matrix
-        f1, recall, accuracy = classify_evaluation(groundTruth, predicts)
-        tn, fp, fn, tp = confusion_matrix(groundTruth, predicts, labels=[0, 1]).ravel()
-    txt_writer.write(f"\tTest  result\t{tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {accuracy=:.3f}, {f1=:.3f}, {recall=:.3f}\n")
+    tf_writer.add_scalar(f'{tmp_subject} / Test - loss', loss.item(), cur_epoch)
+    # Record each subject f1, recall, confusion matrix
+    tp, tn, fp, fn, accuracy, f1_score, recall = cal_evaluation(groundTruth, predicts)
+    txt_writer.write(f"\tTest  result\t{tp=:5d}, {tn=:5d}, {fp=:5d}, {fn=:5d}, {accuracy=:.3f}, {f1_score=:.3f}, {recall=:.3f}\n")
 
 
 def main(trainSubjectID, tf_writer, txt_writer):
-    args = parse_args()
-    cfg = load_config(args)
+    cfg = get_cfg()
     algo = get_algo(cfg)
-    model = build_model(cfg)
+    model = self_model.TransformerModel(cfg)
     optimizer = construct_optimizer(model, cfg)
-    # import self_model
-    # model = self_model.TransformerModel(cfg)
     model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
     
     dataset = MeviewDataset(cfg=cfg, trainID=trainSubjectID, train_mode=True)
