@@ -1,17 +1,18 @@
 
 
+
 import os
 import torch
-import self_model
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from datetime import datetime
+from sklearn.metrics import confusion_matrix
+import carl_model
 from config import get_cfg
 from optimizer import construct_optimizer
 from Dataset import MeviewDataset
-from torch.utils.data import DataLoader
 from algos import get_algo
-from sklearn.metrics import confusion_matrix
-from torch.utils.tensorboard import SummaryWriter
 
 
 now = datetime.now()
@@ -138,7 +139,7 @@ def test(test_loader, model, algo, cur_epoch, tf_writer, txt_writer):
 def main(trainSubjectID, tf_writer, txt_writer):
     cfg = get_cfg()
     algo = get_algo(cfg)
-    model = self_model.TransformerModel(cfg)
+    model = carl_model.TransformerModel(cfg)
     optimizer = construct_optimizer(model, cfg)
     model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
     
