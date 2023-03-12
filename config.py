@@ -11,20 +11,29 @@ CONFIG = edict()
 
 # self-supervised mode (SimClR-like methods compare two augmented views)
 CONFIG.SSL = True
-# the name of dataset dir
-CONFIG.PATH_TO_DATASET = '/data/Users/pingan/micro_expression/crop2onsetBase/'
-# Algorithm used for training: tcc, tcn, scl, classification.
 CONFIG.TRAINING_ALGO = 'classification'
+
+# ******************************************************************************
+# Experiment params
+# ******************************************************************************
+
+CONFIG.DATA = edict()
+CONFIG.DATA.ROOT_PATH = '/data/Users/pingan/micro_expression/crop2onsetBase/'
+CONFIG.DATA.TYPE = {"Onset", "FirstFrame", "Dynamic"}
+CONFIG.DATA.STRIDE = 1
+CONFIG.DATA.PEROID = 15
+CONFIG.DATA.SPLIT_RATE = 0.8
+CONFIG.DATA.LABEL_BIAS = 7
+CONFIG.DATA.INNER_BATCH = 20
 
 # ******************************************************************************
 # Training params
 # ******************************************************************************
 
 CONFIG.TRAIN = edict()
-# Number of training epoch.
-CONFIG.TRAIN.MAX_EPOCHS = 500
-# Number of samples in each batch.
+CONFIG.TRAIN.NUM_WORKER = 8
 CONFIG.TRAIN.BATCH_SIZE = 12
+CONFIG.TRAIN.MAX_EPOCHS = 500
 # Number of frames to use while training.
 CONFIG.TRAIN.NUM_FRAMES = 240
 

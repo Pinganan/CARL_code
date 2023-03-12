@@ -8,11 +8,12 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from datetime import datetime
 from sklearn.metrics import confusion_matrix
+
 import carl_model
-from config import get_cfg
-from optimizer import construct_optimizer
-from Dataset import MeviewDataset
 from algos import get_algo
+from config import get_cfg
+from dataset import MeviewDataLoader
+from optimizer import construct_optimizer
 
 
 now = datetime.now()
@@ -143,11 +144,10 @@ def main(trainSubjectID, tf_writer, txt_writer):
     optimizer = construct_optimizer(model, cfg)
     model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
     
-    dataset = MeviewDataset(cfg=cfg, trainID=trainSubjectID, train_mode=True)
-    train_loader = DataLoader(dataset.get_trainDataset(), batch_size=cfg.TRAIN.BATCH_SIZE, 
-                              shuffle=True, num_workers=8)
-    val_loader = DataLoader(dataset.get_valDataset(), batch_size=1)
-    test_loader = DataLoader(dataset.get_testingDataset(), batch_size=1)
+    loader = MeviewDataLoader(cfg=cfg, trainID=trainSubjectID)
+    train_loader = loader.get_trainLoader()
+    # val_loader = DataLoader(dataset.get_valDataset(), batch_size=1)
+    test_loader = loader.get_testLoader()
 
     """Trains model and evaluates on relevant downstream tasks."""
     print(f"Start to Train {SUBJECTS[trainSubjectID]}")
