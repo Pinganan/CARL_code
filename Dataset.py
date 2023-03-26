@@ -3,6 +3,7 @@ import re
 import glob
 import torch
 from torchvision.io import read_image
+from torchvision import transforms
 
 
 SUBJECTS = ["sub01_01", "sub02_01", "sub03_01", "sub05_02", "sub06_01",
@@ -41,6 +42,7 @@ class MeviewDataset(object):
             self.split_TrainVal_data()
 
     def load_sequence_image(self):
+        rsize = transforms.Resize(size = (224, 224))
         pos_data, pos_label = torch.Tensor(), torch.Tensor()
         neg_data, neg_label = torch.Tensor(), torch.Tensor()
         for sid, subject in enumerate(SUBJECTS):
@@ -48,7 +50,7 @@ class MeviewDataset(object):
                 continue
             input_paths = get_file_paths(
                 f'{self.cfg.PATH_TO_DATASET}/{subject}', '.png')
-            images = torch.stack([read_image(path) for path in input_paths])
+            images = torch.stack([rsize(read_image(path)) for path in input_paths])
             labels = torch.Tensor([1 if ONSET[sid] <= i < OFFSET[sid] else 0 for i in range(len(images))])
             p_data, p_label, n_data, n_label = self.split_PosNeg_data(images, labels)
             pos_data = torch.cat((pos_data, p_data))
